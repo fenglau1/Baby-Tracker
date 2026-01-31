@@ -146,60 +146,57 @@ const App: React.FC = () => {
   }, [isLoggedIn]);
 
   // Sync Logic with Google Drive
+  const syncWithDrive = async () => {
+    if (!isGoogleLinked) return;
+    try {
+      setSyncStatus('syncing');
+      await initGapi();
+
+      const token = localStorage.getItem('sunnyBaby_googleToken');
+      if (token) {
+        setGapiToken(token);
+      } else {
+        console.warn('No Google token found in localStorage for sync');
+      }
+
+      const fileId = await findOrCreateDatabaseFile();
+
+      // 1. Download and Merge
+      const cloudData = await downloadData(fileId) as any;
+      if (cloudData && cloudData.logs) {
+        await db.transaction('rw', [db.logs, db.children, db.appointments, db.caregivers, db.joinRequests], async () => {
+          // Simple merge: cloud overwrites local for simplicity in this version
+          await db.logs.clear();
+          await db.children.clear();
+          await db.appointments.clear();
+          await db.caregivers.clear();
+          await db.joinRequests.clear();
+
+          await db.logs.bulkAdd(cloudData.logs);
+          await db.children.bulkAdd(cloudData.children);
+          await db.appointments.bulkAdd(cloudData.appointments);
+          if (cloudData.caregivers) await db.caregivers.bulkAdd(cloudData.caregivers);
+          if (cloudData.joinRequests) await db.joinRequests.bulkAdd(cloudData.joinRequests);
+        });
+
+        // Update state
+        setLogs(cloudData.logs.sort((a: any, b: any) => b.timestamp - a.timestamp));
+        setChildren(cloudData.children);
+        setAppointments(cloudData.appointments);
+        if (cloudData.caregivers) setCaregivers(cloudData.caregivers);
+        if (cloudData.joinRequests) setJoinRequests(cloudData.joinRequests);
+      }
+
+      setSyncStatus('idle');
+      console.log('🏁 Sync sequence completed');
+    } catch (err: any) {
+      console.error('Cloud Sync Error:', err);
+      setSyncStatus('error');
+    }
+  };
+
   useEffect(() => {
     if (isGoogleLinked) {
-      const syncWithDrive = async () => {
-        try {
-          setSyncStatus('syncing');
-          await initGapi();
-
-          const token = localStorage.getItem('sunnyBaby_googleToken');
-          if (token) {
-            setGapiToken(token);
-          } else {
-            console.warn('No Google token found in localStorage for sync');
-          }
-
-          const fileId = await findOrCreateDatabaseFile();
-
-          // 1. Download and Merge
-          const cloudData = await downloadData(fileId) as any;
-          if (cloudData && cloudData.logs) {
-            await db.transaction('rw', db.logs, db.children, db.appointments, async () => {
-              // Simple merge: cloud overwrites local for simplicity in this version
-              // More complex logic would check timestamps
-              await db.logs.clear();
-              await db.children.clear();
-              await db.appointments.clear();
-              await db.caregivers.clear();
-              await db.logs.bulkAdd(cloudData.logs);
-              await db.children.bulkAdd(cloudData.children);
-              await db.appointments.bulkAdd(cloudData.appointments);
-              if (cloudData.caregivers) await db.caregivers.bulkAdd(cloudData.caregivers);
-            });
-
-            // Update state
-            setLogs(cloudData.logs.sort((a: any, b: any) => b.timestamp - a.timestamp));
-            setChildren(cloudData.children);
-            setAppointments(cloudData.appointments);
-            if (cloudData.caregivers) setCaregivers(cloudData.caregivers);
-          }
-
-          setSyncStatus('idle');
-        } catch (err: any) {
-          console.error('Initial Sync Error Details:', {
-            message: err.message,
-            result: err.result,
-            error: err.error,
-            details: err
-          });
-          setSyncStatus('error');
-
-          // Show a slightly more detailed toast for deep debugging
-          const errorMsg = err.result?.error?.message || err.message || 'Unknown sync error';
-          console.error(`Detailed Sync Error: ${errorMsg}`);
-        }
-      };
       syncWithDrive();
     }
   }, [isGoogleLinked]);
@@ -437,7 +434,9 @@ const App: React.FC = () => {
           {syncStatus === 'syncing' ? (
             <><div className="w-2 h-2 rounded-full bg-orange-500 animate-ping" /> Syncing...</>
           ) : syncStatus === 'error' ? (
-            <><CloudOff size={12} /> Sync Error</>
+            <button onClick={() => syncWithDrive()} className="flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform">
+              <CloudOff size={12} /> Sync Error • Retry
+            </button>
           ) : (
             <><Cloud size={12} /> Cloud Saved</>
           )}

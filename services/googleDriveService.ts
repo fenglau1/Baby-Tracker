@@ -36,29 +36,45 @@ export const setGapiToken = (token: string) => {
 };
 
 export const findOrCreateDatabaseFile = async () => {
-    // Search for database.json in appDataFolder
-    const response = await gapi.client.drive.files.list({
-        spaces: 'appDataFolder',
-        fields: 'files(id, name)',
-        q: "name = 'database.json'",
-    });
+    if (!gapi?.client?.drive) {
+        console.error('❌ GAPI Drive client not ready. Attempting to reload...');
+        await initGapi();
+        if (!gapi?.client?.drive) {
+            throw new Error('Google Drive client failed to initialize. Please check your internet connection or login status.');
+        }
+    }
 
-    let files = response.result.files;
-    if (files && files.length > 0) {
-        console.log('✅ Sync Success: Found existing database file on Google Drive:', files[0].id);
-        return files[0].id;
-    } else {
-        console.log('📦 First Sync: Creating new database.json on Google Drive appDataFolder...');
-        // Create the file
-        const fileMetadata = {
-            'name': 'database.json',
-            'parents': ['appDataFolder']
-        };
-        const createResponse = await gapi.client.drive.files.create({
-            resource: fileMetadata,
-            fields: 'id'
+    try {
+        console.log('🔍 Sync: Searching for database.json in appDataFolder...');
+        // Search for database.json in appDataFolder
+        const response = await gapi.client.drive.files.list({
+            spaces: 'appDataFolder',
+            fields: 'files(id, name)',
+            q: "name = 'database.json'",
         });
-        return createResponse.result.id;
+
+        let files = response.result.files;
+        if (files && files.length > 0) {
+            console.log('✅ Sync Success: Found existing database file on Google Drive:', files[0].id);
+            return files[0].id;
+        } else {
+            console.log('📦 First Sync: Creating new database.json on Google Drive appDataFolder...');
+            // Create the file
+            const fileMetadata = {
+                'name': 'database.json',
+                'parents': ['appDataFolder']
+            };
+            const createResponse = await gapi.client.drive.files.create({
+                resource: fileMetadata,
+                fields: 'id'
+            });
+            console.log('✅ Created new cloud database file:', createResponse.result.id);
+            return createResponse.result.id;
+        }
+    } catch (err: any) {
+        console.error('❌ Google Drive list/create error:', err);
+        const detail = err.result?.error?.message || err.message || JSON.stringify(err);
+        throw new Error(`Cloud Storage Error: ${detail}`);
     }
 };
 
