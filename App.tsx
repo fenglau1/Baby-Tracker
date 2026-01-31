@@ -60,6 +60,42 @@ const App: React.FC = () => {
   const navRef = useRef<HTMLElement>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout>(null);
 
+  // --- Notification Engine ---
+  useEffect(() => {
+    const checkReminders = () => {
+      const isNotifEnabled = localStorage.getItem('sunny_pref_notif') !== 'false';
+      if (!isNotifEnabled || Notification.permission !== 'granted') return;
+
+      const now = Date.now();
+      const next24h = now + 24 * 60 * 60 * 1000;
+
+      appointments.forEach(appt => {
+        const apptDate = new Date(appt.plannedDate).getTime();
+        if (apptDate > now && apptDate <= next24h) {
+          const child = children.find(c => c.id === apptId(appt));
+          const childName = child?.name || 'Baby';
+
+          // Use a simple key to avoid duplicate pings in the same session
+          const reminderKey = `sunny_rem_vax_${appt.childId}_${appt.vaccineName}_${appt.plannedDate}`;
+          if (localStorage.getItem(reminderKey)) return;
+
+          new Notification('💉 Vaccine Reminder', {
+            body: `${childName} has a ${appt.vaccineName} scheduled for tomorrow!`,
+            icon: '/sunnybaby_icon_192.png'
+          });
+          localStorage.setItem(reminderKey, 'true');
+        }
+      });
+    };
+
+    const apptId = (a: VaccineAppointment) => a.childId;
+
+    // Check on mount and then every hour
+    checkReminders();
+    const interval = setInterval(checkReminders, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [appointments, children]);
+
   // Load from Dexie on mount
   useEffect(() => {
     const loadDataFromDexie = async () => {
@@ -655,7 +691,7 @@ const App: React.FC = () => {
 
         <nav
           ref={navRef}
-          className="absolute bottom-6 left-6 right-6 min-h-[5rem] pb-[env(safe-area-inset-bottom)] bg-white/40 backdrop-blur-3xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center justify-around px-1 z-50 ring-1 ring-white/80"
+          className="absolute bottom-6 left-6 right-6 min-h-[6.5rem] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2 bg-white/40 backdrop-blur-3xl rounded-[3rem] shadow-[0_25px_60px_rgba(0,0,0,0.15)] flex items-center justify-around px-2 z-50 ring-1 ring-white/80"
         >
           <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Home size={24} />} label="Home" />
           <NavButton active={view === 'analytics'} onClick={() => setView('analytics')} icon={<BarChart2 size={24} />} label="Trends" />
@@ -663,11 +699,11 @@ const App: React.FC = () => {
           <div className="relative -top-12">
             <button
               onClick={() => openAddModal()}
-              className="w-22 h-22 rounded-full bg-gradient-to-tr from-orange-400 to-yellow-400 flex items-center justify-center text-white shadow-[0_12px_25px_rgba(249,115,22,0.4)] border-[6px] border-white transition-all active:scale-95 active:shadow-none hover:scale-105 hover:-translate-y-1 group relative overflow-hidden ring-4 ring-black/5"
+              className="w-24 h-24 rounded-full bg-gradient-to-tr from-orange-400 to-yellow-400 flex items-center justify-center text-white shadow-[0_15px_35px_rgba(249,115,22,0.4)] border-[8px] border-white transition-all active:scale-95 active:shadow-none hover:scale-105 hover:-translate-y-1 group relative overflow-hidden ring-4 ring-black/5"
             >
               {/* Subtle shine effect */}
               <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 blur-[2px]" />
-              <Plus size={40} strokeWidth={4} className="relative z-10 drop-shadow-md" />
+              <Plus size={44} strokeWidth={4} className="relative z-10 drop-shadow-md" />
             </button>
           </div>
 
@@ -682,15 +718,15 @@ const App: React.FC = () => {
 const NavButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center justify-center w-14 h-14 rounded-2xl transition-all duration-500
+    className={`flex flex-col items-center justify-center w-16 h-16 rounded-[1.5rem] transition-all duration-500
       ${active
-        ? 'bg-white/90 text-orange-500 -translate-y-4 shadow-[0_15px_30px_-10px_rgba(251,146,60,0.4)] scale-110'
+        ? 'bg-white/90 text-orange-500 -translate-y-6 shadow-[0_20px_40px_-10px_rgba(251,146,60,0.5)] scale-110'
         : 'text-slate-500 hover:text-slate-900 hover:bg-white/30'}`}
   >
     <div className={`transition-transform duration-500 ${active ? 'scale-110' : 'scale-100 opacity-60'}`}>
-      {icon}
+      {React.cloneElement(icon as React.ReactElement, { size: 28 })}
     </div>
-    {active && <span className="text-[10px] font-black mt-1 uppercase tracking-widest text-orange-500 opacity-100">{label}</span>}
+    {active && <span className="text-[11px] font-black mt-1 uppercase tracking-widest text-orange-500 opacity-100">{label}</span>}
   </button>
 );
 

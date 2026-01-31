@@ -179,7 +179,7 @@ export const Settings: React.FC<SettingsProps> = ({
         if (Notification.permission === 'granted') {
             new Notification('✨ SunnyBaby', {
                 body: 'Hooray! Notifications are working on your device.',
-                icon: '/assets/baby_mascot_clean.png',
+                icon: '/sunnybaby_icon_192.png',
             });
         } else {
             showToast('Please allow notification permission first');
