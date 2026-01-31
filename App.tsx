@@ -60,22 +60,11 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
-
-  // --- Safari Debugger ---
-  useEffect(() => {
-    const handleError = (e: ErrorEvent) => {
-      console.error('🔥 Global App Error:', e.message);
-      setErrorStatus(`Critical: ${e.message}`);
-    };
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
-  }, []);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -176,7 +165,6 @@ const App: React.FC = () => {
         }
       } catch (err: any) {
         console.error('Dexie load error, falling back to legacy state:', err);
-        setErrorStatus(`Storage Error: ${err.message || 'IndexedDB Blocked'}`);
         const legacyChildren = safeParse('sunnyBaby_children', INITIAL_CHILDREN);
         setChildren(legacyChildren);
         setCurrentChildId(legacyChildren[0]?.id || 'c1');
@@ -616,23 +604,12 @@ const App: React.FC = () => {
 
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
 
-  if (errorStatus) return (
-    <div className="fixed inset-0 bg-red-50 flex flex-col items-center justify-center p-10 text-center z-[500]">
-      <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-red-500 mb-4">
-        <CloudOff size={32} />
-      </div>
-      <h2 className="text-xl font-black text-red-700 mb-2">Oops! Safari Issue</h2>
-      <p className="text-red-500/70 text-sm font-bold mb-6">{errorStatus}</p>
-      <button onClick={() => window.location.reload()} className="bg-red-500 text-white px-8 py-3 rounded-full font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-transform">Reload App</button>
-    </div>
-  );
-
   if (isLoading) return (
-    <div className="fixed inset-0 bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center z-[400]">
-      <div className="w-16 h-16 bg-yellow-100 rounded-[2rem] mb-6 flex items-center justify-center shadow-inner">
-        <div className="w-4 h-4 bg-yellow-400 rounded-full animate-bounce" />
+    <div className="h-screen w-full bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center animate-pulse">
+      <div className="w-24 h-24 bg-yellow-100 rounded-[2rem] mb-6 flex items-center justify-center">
+        <div className="w-12 h-12 bg-yellow-400 rounded-full animate-bounce" />
       </div>
-      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] animate-pulse">Initializing...</p>
+      <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Waking up the engine...</p>
     </div>
   );
 
@@ -647,7 +624,7 @@ const App: React.FC = () => {
   if (showOnboarding) return <Onboarding onComplete={handleOnboardingComplete} />;
 
   return (
-    <div className="fixed inset-0 font-sans text-slate-800 select-none overflow-hidden touch-none scrollbar-hide">
+    <div className="min-h-screen min-h-[100dvh] font-sans text-slate-800 select-none overflow-hidden relative">
       <Background />
 
       {/* Cloud Status Indicator */}
@@ -668,7 +645,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <div className="max-w-md mx-auto h-full relative flex flex-col z-10 overflow-hidden">
+      <div className="max-w-md mx-auto h-[100dvh] relative flex flex-col z-10 overflow-hidden">
         <div className="flex-1 overflow-hidden relative" ref={contentRef}>
           {view === 'dashboard' && currentChild && (
             <Dashboard

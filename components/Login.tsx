@@ -60,13 +60,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div ref={containerRef} className="min-h-screen bg-[#FFFBEB] flex flex-col items-center justify-center p-6 relative overflow-hidden">
          {/* Animated Playful Pop Background Blobs */}
          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-yellow-300/30 rounded-full mix-blend-multiply filter blur-[80px] animate-blob"></div>
-            <div className="absolute top-[10%] right-[-5%] w-[50%] h-[50%] bg-orange-300/30 rounded-full mix-blend-multiply filter blur-[80px] animate-blob animation-delay-2000"></div>
-            <div className="absolute bottom-[-15%] left-[20%] w-[65%] h-[65%] bg-pink-300/30 rounded-full mix-blend-multiply filter blur-[80px] animate-blob animation-delay-4000"></div>
-            <div className="absolute top-[40%] left-[30%] w-[40%] h-[40%] bg-blue-200/20 rounded-full mix-blend-multiply filter blur-[60px] animate-blob animation-delay-6000"></div>
+            <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-yellow-200 rounded-full opacity-20 filter blur-3xl animate-blob"></div>
+            <div className="absolute top-[10%] right-[-5%] w-[50%] h-[50%] bg-orange-200 rounded-full opacity-20 filter blur-3xl animate-blob animation-delay-2000"></div>
+            <div className="absolute bottom-[-15%] left-[20%] w-[65%] h-[65%] bg-pink-200 rounded-full opacity-20 filter blur-3xl animate-blob animation-delay-4000"></div>
+            <div className="absolute top-[40%] left-[30%] w-[40%] h-[40%] bg-blue-100 rounded-full opacity-10 filter blur-2xl animate-blob animation-delay-6000"></div>
          </div>
 
-         <div ref={contentRef} className="relative z-10 bg-white/60 backdrop-blur-2xl p-10 rounded-[4rem] shadow-[0_32px_100px_rgba(0,0,0,0.08)] border border-white/80 w-full max-w-sm text-center">
+         <div ref={contentRef} className="relative z-10 bg-white p-10 rounded-[4rem] shadow-2xl w-full max-w-sm text-center border-4 border-white">
             <div className="mb-10 flex justify-center">
                <div ref={logoRef} className="w-42 h-42 relative group cursor-pointer">
                   {/* Outer Glow */}
@@ -74,7 +74,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   <img
                      src={babyMascot}
                      alt="SunnyBaby Mascot"
-                     className="w-full h-full object-contain relative z-10 drop-shadow-2xl group-hover:scale-105 transition-transform duration-500 mix-blend-multiply"
+                     className="w-full h-full object-contain relative z-10 drop-shadow-2xl group-hover:scale-105 transition-transform duration-500"
                   />
                </div>
             </div>
