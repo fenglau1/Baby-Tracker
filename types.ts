@@ -17,6 +17,18 @@ export interface Caregiver {
   role: string;
   photoUrl: string;
   accessLevel: 'Owner' | 'Editor' | 'Viewer';
+  status: 'pending' | 'approved';
+  joinedAt: number;
+}
+
+export interface JoinRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  inviteCode: string;
+  status: 'pending' | 'approved' | 'denied';
+  timestamp: number;
 }
 
 export interface Child {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { INITIAL_CHILDREN, LogEntry, Child, ActivityType, VaccineAppointment, Caregiver } from './types';
+import { INITIAL_CHILDREN, LogEntry, Child, ActivityType, VaccineAppointment, Caregiver, JoinRequest } from './types';
 import { Dashboard } from './components/Dashboard';
 import { Analytics } from './components/Analytics';
 import { Activity } from './components/Activity';
@@ -54,6 +54,7 @@ const App: React.FC = () => {
   const [isBabySettingsOpen, setIsBabySettingsOpen] = useState(false);
   const [editingChild, setEditingChild] = useState<Child | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -63,11 +64,12 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadDataFromDexie = async () => {
       try {
-        const [dbLogs, dbChildren, dbAppts, dbCaregivers] = await Promise.all([
+        const [dbLogs, dbChildren, dbAppts, dbCaregivers, dbJoinRequests] = await Promise.all([
           db.logs.toArray(),
           db.children.toArray(),
           db.appointments.toArray(),
-          db.caregivers.toArray()
+          db.caregivers.toArray(),
+          db.joinRequests.toArray()
         ]);
 
         if (dbChildren.length > 0) {
@@ -75,6 +77,7 @@ const App: React.FC = () => {
           setLogs(dbLogs.sort((a, b) => b.timestamp - a.timestamp));
           setAppointments(dbAppts);
           setCaregivers(dbCaregivers);
+          setJoinRequests(dbJoinRequests);
           setCurrentChildId(dbChildren[0].id);
 
           // Auto-skip onboarding if we have data
@@ -486,6 +489,46 @@ const App: React.FC = () => {
               setEditingCaregiver(c);
               setIsFamilyModalOpen(true);
             }}
+            joinRequests={joinRequests}
+            onJoinFamily={async (code) => {
+              const profile = JSON.parse(localStorage.getItem('sunny_profile') || '{}');
+              const newRequest: JoinRequest = {
+                id: Date.now().toString(),
+                userId: Date.now().toString(), // Should be real user ID in production
+                userName: profile.name || 'Anonymous',
+                userEmail: profile.email || 'unknown',
+                inviteCode: code,
+                status: 'pending',
+                timestamp: Date.now()
+              };
+              await db.joinRequests.add(newRequest);
+              setJoinRequests([...joinRequests, newRequest]);
+              const toast = document.createElement('div');
+              toast.className = 'fixed top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full text-xs font-black shadow-2xl z-[300] border-2 border-white pointer-events-none';
+              toast.innerHTML = `<span>Request sent: ${code}</span>`;
+              document.body.appendChild(toast);
+              setTimeout(() => toast.remove(), 3000);
+            }}
+            onApproveRequest={async (req) => {
+              const newCaregiver: Caregiver = {
+                id: req.userId,
+                name: req.userName,
+                email: req.userEmail,
+                role: 'Caregiver',
+                photoUrl: `https://picsum.photos/100?u=${req.userId}`,
+                accessLevel: 'Editor',
+                status: 'approved',
+                joinedAt: Date.now()
+              };
+              await db.caregivers.add(newCaregiver);
+              await db.joinRequests.delete(req.id);
+              setCaregivers([...caregivers, newCaregiver]);
+              setJoinRequests(joinRequests.filter(r => r.id !== req.id));
+            }}
+            onDenyRequest={async (req) => {
+              await db.joinRequests.delete(req.id);
+              setJoinRequests(joinRequests.filter(r => r.id !== req.id));
+            }}
           />
           }
         </div>
@@ -530,7 +573,7 @@ const App: React.FC = () => {
 
         <nav
           ref={navRef}
-          className="absolute bottom-8 left-6 right-6 h-20 bg-white/40 backdrop-blur-3xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center justify-around px-1 z-50 ring-1 ring-white/80"
+          className="absolute bottom-6 left-6 right-6 min-h-[5rem] pb-[env(safe-area-inset-bottom)] bg-white/40 backdrop-blur-3xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center justify-around px-1 z-50 ring-1 ring-white/80"
         >
           <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Home size={24} />} label="Home" />
           <NavButton active={view === 'analytics'} onClick={() => setView('analytics')} icon={<BarChart2 size={24} />} label="Trends" />

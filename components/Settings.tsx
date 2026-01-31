@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Download, ChevronRight, LogOut, ToggleRight, ToggleLeft, Scale, Edit2, Save, Plus, Share2, Copy, Check, Users, FileText, Camera, Sparkles, Trash2, UserPlus } from 'lucide-react';
 import { Button3D } from './Button3D';
-import { LogEntry, Child, Caregiver } from '../types';
+import { LogEntry, Child, Caregiver, JoinRequest } from '../types';
 import gsap from 'gsap';
 import { useGoogleLogin } from '@react-oauth/google';
 import { PrivacyModal } from './PrivacyModal';
@@ -20,6 +20,10 @@ interface SettingsProps {
     onUpdateCaregiver: (id: string, updates: Partial<Caregiver>) => void;
     onAddCaregiverClick: () => void;
     onEditCaregiverClick: (caregiver: Caregiver) => void;
+    joinRequests: JoinRequest[];
+    onJoinFamily: (code: string) => void;
+    onApproveRequest: (request: JoinRequest) => void;
+    onDenyRequest: (request: JoinRequest) => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -35,7 +39,11 @@ export const Settings: React.FC<SettingsProps> = ({
     onDeleteCaregiver,
     onUpdateCaregiver,
     onAddCaregiverClick,
-    onEditCaregiverClick
+    onEditCaregiverClick,
+    joinRequests,
+    onJoinFamily,
+    onApproveRequest,
+    onDenyRequest
 }) => {
     const login = useGoogleLogin({
         onSuccess: tokenResponse => {
@@ -56,6 +64,8 @@ export const Settings: React.FC<SettingsProps> = ({
     const [isEditing, setIsEditing] = useState(false);
     const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
     const [inviteCode] = useState(() => 'BABY-' + Math.random().toString(36).substring(2, 7).toUpperCase());
+    const [manualCode, setManualCode] = useState('');
+    const [isJoining, setIsJoining] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Persist effects
@@ -209,6 +219,18 @@ export const Settings: React.FC<SettingsProps> = ({
             }
         }
     };
+
+    const handleManualJoin = () => {
+        if (!manualCode.trim()) {
+            showToast('Please enter a code');
+            return;
+        }
+        onJoinFamily(manualCode.toUpperCase());
+        setManualCode('');
+        setIsJoining(false);
+    };
+
+    const isOwner = profile.email === caregivers.find(c => c.isMain)?.email || caregivers.length === 0;
 
     const handleCopyCode = async () => {
         try {
@@ -388,17 +410,64 @@ export const Settings: React.FC<SettingsProps> = ({
                             </div>
                         )}
 
-                        <div className="mt-6 pt-6 border-t border-slate-100">
-                            <div className="bg-slate-800 rounded-2xl p-4 flex items-center justify-between mb-4 group cursor-pointer active:scale-[0.99] transition-transform shadow-lg" onClick={handleCopyCode}>
-                                <code className="text-yellow-400 font-mono text-xl font-black tracking-wider">{inviteCode}</code>
-                                <Copy size={18} className="text-slate-400 group-hover:text-white transition-colors" />
-                            </div>
-                            <Button3D variant="primary" fullWidth onClick={handleInvite} className="py-3">
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Share2 size={18} />
-                                    <span>Share Invite Link</span>
+                        <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col gap-3">
+                            {isOwner && joinRequests.length > 0 && (
+                                <div className="mb-4 space-y-3">
+                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pending Requests</h5>
+                                    {joinRequests.map(req => (
+                                        <div key={req.id} className="bg-yellow-50 border border-yellow-100 rounded-2xl p-4 flex items-center justify-between animate-in zoom-in-95 duration-200">
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-black text-slate-700">{req.userName}</span>
+                                                <span className="text-[10px] font-bold text-slate-400">{req.userEmail}</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => onApproveRequest(req)} className="p-2 bg-green-500 text-white rounded-xl shadow-sm active:scale-95 transition-all"><Check size={16} strokeWidth={3} /></button>
+                                                <button onClick={() => onDenyRequest(req)} className="p-2 bg-red-500 text-white rounded-xl shadow-sm active:scale-95 transition-all"><Trash2 size={16} /></button>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            </Button3D>
+                            )}
+
+                            <div className="flex flex-col gap-3">
+                                <div className="bg-slate-800 rounded-2xl p-4 flex items-center justify-between group cursor-pointer active:scale-[0.99] transition-transform shadow-lg" onClick={handleCopyCode}>
+                                    <div className="flex flex-col">
+                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Family Code</span>
+                                        <code className="text-yellow-400 font-mono text-xl font-black tracking-wider">{inviteCode}</code>
+                                    </div>
+                                    <Copy size={18} className="text-slate-400 group-hover:text-white transition-colors" />
+                                </div>
+                                <Button3D variant="primary" fullWidth onClick={handleInvite} className="py-3">
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <Share2 size={18} />
+                                        <span>Share Invite Link</span>
+                                    </div>
+                                </Button3D>
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-slate-100/50">
+                                {isJoining ? (
+                                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <input
+                                            value={manualCode}
+                                            onChange={(e) => setManualCode(e.target.value)}
+                                            placeholder="ENTER CODE (e.g. BABY-XYZ)"
+                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-sm font-black text-slate-700 focus:outline-none focus:border-yellow-400 transition-all uppercase placeholder:normal-case"
+                                        />
+                                        <div className="flex gap-2">
+                                            <Button3D variant="primary" fullWidth onClick={handleManualJoin} className="py-3">Join Now</Button3D>
+                                            <button onClick={() => setIsJoining(false)} className="px-6 text-slate-400 font-black text-xs uppercase">Cancel</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setIsJoining(true)}
+                                        className="w-full py-4 rounded-2xl border-2 border-slate-100 border-dashed text-slate-400 font-black text-xs uppercase tracking-widest hover:border-slate-200 hover:text-slate-500 transition-all"
+                                    >
+                                        Join Existing Family
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
