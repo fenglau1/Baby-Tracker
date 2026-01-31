@@ -1,0 +1,17 @@
+{
+    "name": "SunnyBaby Tracker",
+    "short_name": "SunnyBaby",
+    "description": "Playful and private baby activity tracker.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#fdf6e3",
+    "theme_color": "#fb923c",
+    "icons": [
+        {
+            "src": "/assets/icon.png",
+            "sizes": "1024x1024",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

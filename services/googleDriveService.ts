@@ -45,8 +45,10 @@ export const findOrCreateDatabaseFile = async () => {
 
     let files = response.result.files;
     if (files && files.length > 0) {
+        console.log('✅ Sync Success: Found existing database file on Google Drive:', files[0].id);
         return files[0].id;
     } else {
+        console.log('📦 First Sync: Creating new database.json on Google Drive appDataFolder...');
         // Create the file
         const fileMetadata = {
             'name': 'database.json',
