@@ -59,6 +59,7 @@ const App: React.FC = () => {
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -121,13 +122,18 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadDataFromDexie = async () => {
       try {
-        const [dbLogs, dbChildren, dbAppts, dbCaregivers, dbJoinRequests] = await Promise.all([
+        console.log('📦 Dexie: Loading tables...');
+        // Add a safety timeout to avoid hanging if IndexedDB stalls
+        const dexiePromise = Promise.all([
           db.logs.toArray(),
           db.children.toArray(),
           db.appointments.toArray(),
           db.caregivers.toArray(),
           db.joinRequests.toArray()
         ]);
+
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Dexie timeout")), 3000));
+        const [dbLogs, dbChildren, dbAppts, dbCaregivers, dbJoinRequests] = await Promise.race([dexiePromise, timeoutPromise]) as any;
 
         if (dbChildren.length > 0) {
           setChildren(dbChildren);
@@ -139,28 +145,30 @@ const App: React.FC = () => {
 
           // Auto-skip onboarding if we have data
           if (localStorage.getItem('sunnyBaby_onboardingComplete') !== 'true') {
+            console.log('✅ Found existing children, skipping onboarding...');
             localStorage.setItem('sunnyBaby_onboardingComplete', 'true');
             setShowOnboarding(false);
           }
         } else {
-          // Fallback to legacy localStorage or initial
+          // Fallback to legacy
           const legacyChildren = safeParse('sunnyBaby_children', INITIAL_CHILDREN);
           setChildren(legacyChildren);
           setCurrentChildId(legacyChildren[0]?.id || 'c1');
 
-          // If legacy data exists, skip onboarding too
           if (legacyChildren.length > 0 && localStorage.getItem('sunnyBaby_onboardingComplete') !== 'true') {
             localStorage.setItem('sunnyBaby_onboardingComplete', 'true');
             setShowOnboarding(false);
           }
         }
       } catch (err) {
-        console.error('Dexie load error, falling back to localStorage:', err);
+        console.error('Dexie load error, falling back to legacy state:', err);
         const legacyChildren = safeParse('sunnyBaby_children', INITIAL_CHILDREN);
         setChildren(legacyChildren);
         setCurrentChildId(legacyChildren[0]?.id || 'c1');
         setLogs(safeParse('babyTrackerLogs', []));
         setAppointments(safeParse('babyTrackerAppointments', []));
+      } finally {
+        setIsLoading(false);
       }
     };
     loadDataFromDexie();
@@ -610,10 +618,18 @@ const App: React.FC = () => {
   };
 
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
+  if (isLoading) return (
+    <div className="h-screen w-full bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center animate-pulse">
+      <div className="w-24 h-24 bg-yellow-100 rounded-[2rem] mb-6 flex items-center justify-center">
+        <div className="w-12 h-12 bg-yellow-400 rounded-full animate-bounce" />
+      </div>
+      <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Waking up the engine...</p>
+    </div>
+  );
   if (showOnboarding) return <Onboarding onComplete={handleOnboardingComplete} />;
 
   return (
-    <div className="min-h-[100dvh] font-sans text-slate-800 select-none overflow-hidden relative">
+    <div className="min-h-screen min-h-[100dvh] font-sans text-slate-800 select-none overflow-hidden relative">
       <Background />
 
       {/* Cloud Status Indicator */}
