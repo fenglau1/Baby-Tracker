@@ -305,12 +305,37 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn, showOnboarding]);
 
-  const handleLogin = (googleToken?: string) => {
+  const [userProfile, setUserProfile] = useState(() => {
+    return safeParse('sunny_profile', { name: 'Parent', email: 'user@sunnybaby.app', photoUrl: '' });
+  });
+
+  const handleLogin = async (googleToken?: string) => {
     setIsLoggedIn(true);
     localStorage.setItem('sunnyBaby_isLoggedIn', 'true');
+
     if (googleToken) {
       localStorage.setItem('sunnyBaby_googleToken', googleToken);
       setIsGoogleLinked(true);
+
+      // Fetch Profile from Google
+      try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${googleToken}` }
+        });
+        const data = await response.json();
+
+        const newProfile = {
+          name: data.name || userProfile.name,
+          email: data.email || userProfile.email,
+          photoUrl: data.picture || userProfile.photoUrl
+        };
+
+        setUserProfile(newProfile);
+        localStorage.setItem('sunny_profile', JSON.stringify(newProfile));
+        console.log('✅ Google Profile Synced:', newProfile.email);
+      } catch (err) {
+        console.error('Failed to fetch Google profile:', err);
+      }
     }
   };
 
@@ -578,6 +603,11 @@ const App: React.FC = () => {
             onDenyRequest={async (req) => {
               await db.joinRequests.delete(req.id);
               setJoinRequests(joinRequests.filter(r => r.id !== req.id));
+            }}
+            profile={userProfile}
+            onUpdateProfile={(p) => {
+              setUserProfile(p);
+              localStorage.setItem('sunny_profile', JSON.stringify(p));
             }}
           />
           }

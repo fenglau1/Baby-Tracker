@@ -24,6 +24,8 @@ interface SettingsProps {
     onJoinFamily: (code: string) => void;
     onApproveRequest: (request: JoinRequest) => void;
     onDenyRequest: (request: JoinRequest) => void;
+    profile: { name: string; email: string; photoUrl: string };
+    onUpdateProfile: (profile: { name: string; email: string; photoUrl: string }) => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -43,7 +45,9 @@ export const Settings: React.FC<SettingsProps> = ({
     joinRequests,
     onJoinFamily,
     onApproveRequest,
-    onDenyRequest
+    onDenyRequest,
+    profile: initialProfile,
+    onUpdateProfile
 }) => {
     const login = useGoogleLogin({
         onSuccess: tokenResponse => {
@@ -56,10 +60,11 @@ export const Settings: React.FC<SettingsProps> = ({
     const [metric, setMetric] = useState(() => localStorage.getItem('sunny_pref_metric') !== 'false');
     const [notifications, setNotifications] = useState(() => localStorage.getItem('sunny_pref_notif') !== 'false');
 
-    const [profile, setProfile] = useState(() => {
-        const saved = localStorage.getItem('sunny_profile');
-        return saved ? JSON.parse(saved) : { name: 'Parent', email: 'user@sunnybaby.app', photoUrl: '' };
-    });
+    const [profile, setProfile] = useState(initialProfile);
+
+    useEffect(() => {
+        setProfile(initialProfile);
+    }, [initialProfile]);
 
     const [isEditing, setIsEditing] = useState(false);
     const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
@@ -90,7 +95,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
     const handleSaveProfile = () => {
         setIsEditing(false);
-        localStorage.setItem('sunny_profile', JSON.stringify(profile));
+        onUpdateProfile(profile);
         showToast('Profile updated successfully!');
     };
 
