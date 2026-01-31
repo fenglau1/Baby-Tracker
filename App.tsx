@@ -81,6 +81,9 @@ const App: React.FC = () => {
   const navRef = useRef<HTMLElement>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout>(null);
 
+  // Robust child selection
+  const currentChild = children.find(c => c.id === currentChildId) || children[0];
+
   // --- Auto-Refresh On Focus ---
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -352,8 +355,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (contentRef.current) {
       gsap.fromTo(contentRef.current,
-        { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' }
+        { opacity: 0, scale: 0.98 },
+        { opacity: 1, scale: 1, duration: 0.3, ease: 'power1.out' }
       );
     }
   }, [view]);
@@ -421,7 +424,6 @@ const App: React.FC = () => {
     setShowOnboarding(false);
   };
 
-  const currentChild = children.find(c => c.id === currentChildId) || children[0];
   const childLogs = logs.filter(l => l.childId === currentChild?.id).sort((a, b) => b.timestamp - a.timestamp);
   const childAppointments = appointments.filter(a => a.childId === currentChild?.id);
 
@@ -625,14 +627,23 @@ const App: React.FC = () => {
     </div>
   );
 
-  if (isLoading || (isLoggedIn && children.length === 0)) return (
+  if (isLoading) return (
     <div className="fixed inset-0 bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center z-[400]">
-      <div className="w-24 h-24 bg-yellow-100 rounded-[3rem] mb-6 flex items-center justify-center shadow-inner">
+      <div className="w-16 h-16 bg-yellow-100 rounded-[2rem] mb-6 flex items-center justify-center shadow-inner">
         <div className="w-4 h-4 bg-yellow-400 rounded-full animate-bounce" />
       </div>
-      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] animate-pulse">Initializing SunnyBaby...</p>
+      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] animate-pulse">Initializing...</p>
     </div>
   );
+
+  if (isLoggedIn && children.length === 0 && !showOnboarding) {
+    return (
+      <div className="fixed inset-0 bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center z-[400]">
+        <p className="text-slate-400 font-bold mb-4">No baby profile found.</p>
+        <button onClick={() => setShowOnboarding(true)} className="bg-orange-500 text-white px-8 py-3 rounded-full">Create Profile</button>
+      </div>
+    );
+  }
   if (showOnboarding) return <Onboarding onComplete={handleOnboardingComplete} />;
 
   return (
@@ -797,7 +808,7 @@ const App: React.FC = () => {
         {/* Nav Bar */}
         <nav
           ref={navRef}
-          className="absolute bottom-6 left-6 right-6 min-h-[6.5rem] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2 bg-white/40 backdrop-blur-3xl rounded-[3rem] shadow-[0_25px_60px_rgba(0,0,0,0.15)] flex items-center justify-around px-2 z-50 ring-1 ring-white/80"
+          className="absolute bottom-6 left-6 right-6 min-h-[5.5rem] bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-around px-2 z-50 ring-1 ring-slate-100"
         >
           <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Home size={28} />} label="Home" />
           <NavButton active={view === 'analytics'} onClick={() => setView('analytics')} icon={<BarChart2 size={28} />} label="Trends" />
