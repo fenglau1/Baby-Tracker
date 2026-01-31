@@ -15,6 +15,8 @@ import gsap from 'gsap';
 import { db } from './services/db';
 import { initGapi, findOrCreateDatabaseFile, uploadData, downloadData, setGapiToken } from './services/googleDriveService';
 
+const APP_VERSION = '2026.1.2';
+
 const safeParse = <T,>(key: string, fallback: T): T => {
   try {
     const item = localStorage.getItem(key);
@@ -55,10 +57,29 @@ const App: React.FC = () => {
   const [editingChild, setEditingChild] = useState<Child | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const [showUpdateToast, setShowUpdateToast] = useState(false);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const contentRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout>(null);
+
+  // --- Auto-Refresh On Focus ---
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isGoogleLinked) {
+        console.log('🔄 App Focused: Triggering auto-sync...');
+        syncWithDrive();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isGoogleLinked]);
 
   // --- Notification Engine ---
   useEffect(() => {
@@ -143,6 +164,13 @@ const App: React.FC = () => {
       }
     };
     loadDataFromDexie();
+
+    // --- Version Check ---
+    const lastVersion = localStorage.getItem('sunny_app_version');
+    if (lastVersion && lastVersion !== APP_VERSION) {
+      setShowUpdateToast(true);
+    }
+    localStorage.setItem('sunny_app_version', APP_VERSION);
   }, []);
 
   // Detect Invite Code
@@ -397,38 +425,73 @@ const App: React.FC = () => {
   const addLog = async (entry: Partial<LogEntry>) => {
     if (!currentChild) return;
 
+    // --- Smart Sleep Timer Logic ---
+    if (entry.type === ActivityType.SLEEP && !editingLog) {
+      if (currentChild.sleepStartTime) {
+        // Stop Sleeping - Calculate Duration
+        const start = currentChild.sleepStartTime;
+        const end = Date.now();
+        const durationMin = Math.max(1, Math.round((end - start) / 60000));
+
+        const newLog: LogEntry = {
+          id: Date.now().toString(),
+          childId: currentChild.id,
+          timestamp: end,
+          type: ActivityType.SLEEP,
+          value: durationMin,
+          details: `Slept for ${durationMin >= 60 ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m` : `${durationMin}m`}`,
+          notes: entry.notes || '',
+          updatedAt: Date.now()
+        };
+
+        await db.logs.add(newLog);
+        setLogs(prev => [newLog, ...prev]);
+
+        // Clear timer
+        const updates = { updatedAt: Date.now(), sleepStartTime: undefined };
+        await db.children.update(currentChild.id, updates);
+        setChildren(prev => prev.map(c => c.id === currentChild.id ? { ...c, ...updates } as Child : c));
+
+        showToast(`🌅 Good morning, ${currentChild.name}! Logged ${durationMin}m sleep.`);
+        return;
+      } else {
+        // Start Sleeping - Record Start Time
+        const updates = { updatedAt: Date.now(), sleepStartTime: Date.now() };
+        await db.children.update(currentChild.id, updates);
+        setChildren(prev => prev.map(c => c.id === currentChild.id ? { ...c, ...updates } as Child : c));
+
+        showToast(`🌙 Sweet dreams, ${currentChild.name}! Timer started.`);
+        return;
+      }
+    }
+
     if (editingLog) {
-      const updatedLog = { ...editingLog, ...entry } as LogEntry;
+      const updatedLog = { ...editingLog, ...entry, updatedAt: Date.now() } as LogEntry;
       await db.logs.update(editingLog.id, updatedLog);
       setLogs(prev => prev.map(l => l.id === editingLog.id ? updatedLog : l));
       setEditingLog(null);
+      setIsAddModalOpen(false);
+      showToast('Log updated!');
     } else {
       const newLog: LogEntry = {
         id: Date.now().toString(),
         childId: currentChild.id,
         timestamp: Date.now(),
-        type: entry.type!,
+        type: entry.type || ActivityType.OTHER,
         details: entry.details || '',
+        updatedAt: Date.now(),
         ...entry
       };
       await db.logs.add(newLog);
       setLogs(prev => [newLog, ...prev]);
+      setIsAddModalOpen(false);
+      showToast('Activity logged!');
 
       if (newLog.type === ActivityType.VACCINE) {
         await db.appointments.where({ childId: currentChild.id, vaccineName: newLog.details }).delete();
         setAppointments(prev => prev.filter(a => !(a.childId === currentChild.id && a.vaccineName === newLog.details)));
       }
     }
-
-    const toast = document.createElement('div');
-    toast.className = 'fixed top-12 left-1/2 -translate-x-1/2 bg-yellow-400/90 text-yellow-950 px-6 py-3 rounded-full text-sm font-black shadow-2xl z-[300] border-2 border-white pointer-events-none flex items-center gap-2';
-    toast.innerHTML = `<span>✨ Recorded for ${currentChild.name}!</span>`;
-    document.body.appendChild(toast);
-
-    gsap.fromTo(toast, { y: -50, opacity: 0, scale: 0.5 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(2)' });
-    setTimeout(() => {
-      gsap.to(toast, { opacity: 0, y: -20, scale: 0.8, duration: 0.4, onComplete: () => toast.remove() });
-    }, 2000);
   };
 
   const deleteLog = async (id: string) => {
@@ -485,7 +548,12 @@ const App: React.FC = () => {
 
   const handleSaveChild = async (childData: Partial<Child>) => {
     if (childData.id) {
-      const updates = { ...childData, updatedAt: Date.now() };
+      const updates = {
+        ...childData,
+        updatedAt: Date.now(),
+        // Preserve fields we don't edit here
+        sleepStartTime: children.find(c => c.id === childData.id)?.sleepStartTime
+      };
       await db.children.update(childData.id, updates);
       setChildren(prev => prev.map(c => c.id === childData.id ? { ...c, ...updates } as Child : c));
     } else {
@@ -525,15 +593,27 @@ const App: React.FC = () => {
         await db.joinRequests.clear();
       });
       localStorage.clear();
-      window.location.reload();
+      window.location.href = window.location.origin;
     }
+  };
+
+  const handleHardRefresh = () => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+      });
+    }
+    // Append a cache-buster query param and reload
+    const url = new URL(window.location.href);
+    url.searchParams.set('v', Date.now().toString());
+    window.location.href = url.toString();
   };
 
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
   if (showOnboarding) return <Onboarding onComplete={handleOnboardingComplete} />;
 
   return (
-    <div className="min-h-screen font-sans text-slate-800 select-none overflow-hidden relative">
+    <div className="min-h-[100dvh] font-sans text-slate-800 select-none overflow-hidden relative">
       <Background />
 
       {/* Cloud Status Indicator */}
@@ -645,6 +725,8 @@ const App: React.FC = () => {
               setUserProfile(p);
               localStorage.setItem('sunny_profile', JSON.stringify(p));
             }}
+            onHardRefresh={handleHardRefresh}
+            version={APP_VERSION}
           />
           }
         </div>
@@ -689,13 +771,13 @@ const App: React.FC = () => {
           }}
         />
 
+        {/* Nav Bar */}
         <nav
           ref={navRef}
           className="absolute bottom-6 left-6 right-6 min-h-[6.5rem] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2 bg-white/40 backdrop-blur-3xl rounded-[3rem] shadow-[0_25px_60px_rgba(0,0,0,0.15)] flex items-center justify-around px-2 z-50 ring-1 ring-white/80"
         >
-          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Home size={24} />} label="Home" />
-          <NavButton active={view === 'analytics'} onClick={() => setView('analytics')} icon={<BarChart2 size={24} />} label="Trends" />
-
+          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Home size={28} />} label="Home" />
+          <NavButton active={view === 'analytics'} onClick={() => setView('analytics')} icon={<BarChart2 size={28} />} label="Trends" />
           <div className="relative -top-12">
             <button
               onClick={() => openAddModal()}
@@ -706,10 +788,36 @@ const App: React.FC = () => {
               <Plus size={44} strokeWidth={4} className="relative z-10 drop-shadow-md" />
             </button>
           </div>
-
-          <NavButton active={view === 'activity'} onClick={() => setView('activity')} icon={<List size={24} />} label="Diary" />
-          <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={<SettingsIcon size={24} />} label="Menu" />
+          <NavButton active={view === 'activity'} onClick={() => setView('activity')} icon={<List size={28} />} label="Diary" />
+          <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={<SettingsIcon size={28} />} label="Menu" />
         </nav>
+
+        {/* Global Toast */}
+        {toast && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 duration-300">
+            <div className="bg-slate-800/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-2 border border-white/10">
+              <span className="text-xs font-black tracking-tight">{toast}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Update Toast */}
+        {showUpdateToast && (
+          <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[300] w-[90%] max-w-xs animate-in slide-in-from-bottom-5 duration-500">
+            <div className="bg-orange-600 text-white p-4 rounded-3xl shadow-2xl border-4 border-white flex flex-col items-center gap-3 text-center">
+              <div className="space-y-1">
+                <p className="font-black text-xs uppercase tracking-widest">New Update Ready!</p>
+                <p className="text-[10px] font-bold opacity-90">We've added the sleep timer & UX fixes.</p>
+              </div>
+              <button
+                onClick={handleHardRefresh}
+                className="bg-white text-orange-600 px-6 py-2 rounded-full font-black text-xs active:scale-95 transition-transform"
+              >
+                Refresh Now
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

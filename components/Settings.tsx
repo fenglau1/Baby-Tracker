@@ -26,6 +26,8 @@ interface SettingsProps {
     onDenyRequest: (request: JoinRequest) => void;
     profile: { name: string; email: string; photoUrl: string };
     onUpdateProfile: (profile: { name: string; email: string; photoUrl: string }) => void;
+    onHardRefresh: () => void;
+    version: string;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -47,7 +49,9 @@ export const Settings: React.FC<SettingsProps> = ({
     onApproveRequest,
     onDenyRequest,
     profile: initialProfile,
-    onUpdateProfile
+    onUpdateProfile,
+    onHardRefresh,
+    version
 }) => {
     const login = useGoogleLogin({
         onSuccess: tokenResponse => {
@@ -164,26 +168,6 @@ export const Settings: React.FC<SettingsProps> = ({
         const newState = !notifications;
         setNotifications(newState);
         showToast(newState ? 'Notifications enabled!' : 'Notifications disabled');
-
-        if (newState) {
-            handleTestNotification();
-        }
-    };
-
-    const handleTestNotification = () => {
-        if (!("Notification" in window)) {
-            showToast('Browser does not support notifications');
-            return;
-        }
-
-        if (Notification.permission === 'granted') {
-            new Notification('✨ SunnyBaby', {
-                body: 'Hooray! Notifications are working on your device.',
-                icon: '/sunnybaby_icon_192.png',
-            });
-        } else {
-            showToast('Please allow notification permission first');
-        }
     };
 
     const handleExport = () => {
@@ -247,7 +231,7 @@ export const Settings: React.FC<SettingsProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full px-6 pt-10 pb-40 overflow-y-auto">
+        <div className="flex flex-col h-full px-6 pt-10 pb-64 overflow-y-auto">
             <h2 className="text-3xl font-black text-slate-800 mb-6 tracking-tight">Settings</h2>
 
             {/* Profile Section */}
@@ -488,19 +472,17 @@ export const Settings: React.FC<SettingsProps> = ({
                     </div>
                     <ChevronRight size={20} className="text-slate-300" />
                 </button>
-                {notifications && (
-                    <button onClick={handleTestNotification} className="w-full bg-white/70 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm border border-white flex items-center justify-between active:scale-[0.98] transition-transform hover:bg-white/90">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-yellow-100 text-yellow-500 rounded-xl"><Sparkles size={20} /></div>
-                            <span className="font-bold text-slate-700 text-sm">Test Notification</span>
-                        </div>
-                        <ChevronRight size={20} className="text-slate-300" />
-                    </button>
-                )}
                 <button onClick={() => setIsPrivacyModalOpen(true)} className="w-full bg-white/70 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm border border-white flex items-center justify-between active:scale-[0.98] transition-transform hover:bg-white/90">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-blue-100 text-blue-500 rounded-xl"><FileText size={20} /></div>
                         <span className="font-bold text-slate-700 text-sm">Privacy Policy</span>
+                    </div>
+                    <ChevronRight size={20} className="text-slate-300" />
+                </button>
+                <button onClick={onHardRefresh} className="w-full bg-white/70 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm border border-white flex items-center justify-between active:scale-[0.98] transition-transform hover:bg-white/90">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-orange-100 text-orange-500 rounded-xl"><Sparkles size={20} /></div>
+                        <span className="font-bold text-slate-700 text-sm">Force Refresh App</span>
                     </div>
                     <ChevronRight size={20} className="text-slate-300" />
                 </button>
@@ -530,7 +512,7 @@ export const Settings: React.FC<SettingsProps> = ({
             )}
 
             <div className="text-center mt-6 mb-10 space-y-4">
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">Version 2026.1.0 • Baby Tracker</p>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">Version {version} • Baby Tracker</p>
                 <div className="flex flex-col gap-3 items-center">
                     <button onClick={onClearData} className="inline-flex items-center gap-2 text-slate-400 hover:text-red-500 font-black text-xs uppercase tracking-wider bg-slate-50 hover:bg-red-50 px-6 py-3 rounded-full transition-all">Clear All Data</button>
                     <button onClick={() => { if (window.confirm('Are you sure you want to log out? Local data will remain.')) { localStorage.removeItem('sunnyBaby_isLoggedIn'); window.location.reload(); } }} className="inline-flex items-center gap-2 text-red-500 hover:text-white font-black text-xs uppercase tracking-wider bg-red-50 hover:bg-red-500 px-6 py-3 rounded-full transition-all border border-red-100"><LogOut size={14} strokeWidth={3} /> Log Out</button>

@@ -83,7 +83,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ child, logs, appointments,
   };
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full pb-32">
+    <div ref={containerRef} className="flex flex-col h-full">
       <div className="px-8 pt-12 pb-6 anim-item">
         <div className="flex items-center justify-between mb-2">
           <div className="flex-1 min-w-0">
@@ -144,9 +144,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ child, logs, appointments,
           />
           <QuickAction
             onClick={() => onQuickAdd(ActivityType.SLEEP)}
-            icon={<Moon size={32} />}
-            label="Sleep"
-            theme="pink"
+            icon={<Moon size={32} className={child.sleepStartTime ? 'animate-pulse text-yellow-200' : ''} />}
+            label={child.sleepStartTime ? 'Wake Up' : 'Sleep'}
+            theme={child.sleepStartTime ? 'indigo' : 'pink'}
           />
         </div>
 
@@ -181,7 +181,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ child, logs, appointments,
           </div>
         )}
 
-        <div className="anim-item pb-10">
+        <div className="anim-item pb-56">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <div className="bg-yellow-100 p-1.5 rounded-lg text-yellow-600">
@@ -216,12 +216,13 @@ const StatusCard = ({ label, time, icon, color }: { label: string, time: string,
   </div>
 );
 
-const QuickAction = ({ onClick, icon, label, theme }: { onClick: () => void, icon: any, label: string, theme: 'yellow' | 'orange' | 'cyan' | 'pink' }) => {
+const QuickAction = ({ onClick, icon, label, theme }: { onClick: () => void, icon: any, label: string, theme: 'yellow' | 'orange' | 'cyan' | 'pink' | 'indigo' }) => {
   const colors = {
     yellow: "from-yellow-300 to-yellow-500 shadow-yellow-100",
     orange: "from-orange-300 to-orange-500 shadow-orange-100",
     cyan: "from-cyan-300 to-cyan-500 shadow-cyan-100",
-    pink: "from-pink-400 to-pink-600 shadow-pink-100"
+    pink: "from-pink-400 to-pink-600 shadow-pink-100",
+    indigo: "from-indigo-500 to-purple-600 shadow-indigo-100"
   };
   return (
     <button

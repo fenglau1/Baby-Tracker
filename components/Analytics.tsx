@@ -128,7 +128,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ logs, child }) => {
     );
 
     return (
-        <div className="flex flex-col h-full px-6 pt-8 pb-40 overflow-y-auto">
+        <div className="flex flex-col h-full px-6 pt-8 pb-64 overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-3xl font-black text-slate-800">Trends</h2>
 

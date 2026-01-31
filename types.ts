@@ -39,6 +39,7 @@ export interface Child {
   photoUrl: string;
   gender: 'boy' | 'girl';
   updatedAt: number;
+  sleepStartTime?: number;
 }
 
 export interface LogEntry {
@@ -51,6 +52,7 @@ export interface LogEntry {
   subType?: string;
   notes?: string;
   imageUrl?: string;
+  updatedAt: number;
 }
 
 export interface VaccineAppointment {
