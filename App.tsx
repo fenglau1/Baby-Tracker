@@ -145,6 +145,25 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn]);
 
+  // --- Bidirectional Merge Helpers ---
+  const mergeLists = <T extends { id: string; updatedAt?: number; timestamp?: number }>(local: T[], cloud: T[]): T[] => {
+    const map = new Map<string, T>();
+    local.forEach(item => map.set(item.id, item));
+    cloud.forEach(cloudItem => {
+      const localItem = map.get(cloudItem.id);
+      if (!localItem) {
+        map.set(cloudItem.id, cloudItem);
+      } else {
+        const cloudTime = cloudItem.updatedAt || cloudItem.timestamp || 0;
+        const localTime = localItem.updatedAt || localItem.timestamp || 0;
+        if (cloudTime > localTime) {
+          map.set(cloudItem.id, cloudItem);
+        }
+      }
+    });
+    return Array.from(map.values());
+  };
+
   // Sync Logic with Google Drive
   const syncWithDrive = async () => {
     if (!isGoogleLinked) return;
@@ -163,28 +182,56 @@ const App: React.FC = () => {
 
       // 1. Download and Merge
       const cloudData = await downloadData(fileId) as any;
-      if (cloudData && cloudData.logs) {
-        await db.transaction('rw', [db.logs, db.children, db.appointments, db.caregivers, db.joinRequests], async () => {
-          // Simple merge: cloud overwrites local for simplicity in this version
-          await db.logs.clear();
-          await db.children.clear();
-          await db.appointments.clear();
-          await db.caregivers.clear();
-          await db.joinRequests.clear();
+      if (cloudData) {
+        // 1. Fetch current local state
+        const localLogs = await db.logs.toArray();
+        const localChildren = await db.children.toArray();
+        const localAppts = await db.appointments.toArray();
+        const localCaregivers = await db.caregivers.toArray();
+        const localRequests = await db.joinRequests.toArray();
 
-          await db.logs.bulkAdd(cloudData.logs);
-          await db.children.bulkAdd(cloudData.children);
-          await db.appointments.bulkAdd(cloudData.appointments);
-          if (cloudData.caregivers) await db.caregivers.bulkAdd(cloudData.caregivers);
-          if (cloudData.joinRequests) await db.joinRequests.bulkAdd(cloudData.joinRequests);
+        // 2. Merge logic
+        const mergedLogs = mergeLists(localLogs, cloudData.logs || []);
+        const mergedChildren = mergeLists(localChildren, cloudData.children || []);
+        const mergedCaregivers = mergeLists(localCaregivers, cloudData.caregivers || []);
+        const mergedRequests = mergeLists(localRequests, cloudData.joinRequests || []);
+
+        // Appointments use a unique string key normally, but let's just union them for now
+        // A better way would be [childId+vaccineName] uniqueness
+        const apptKey = (a: VaccineAppointment) => `${a.childId}-${a.vaccineName}`;
+        const apptMap = new Map<string, VaccineAppointment>();
+        localAppts.forEach(a => apptMap.set(apptKey(a), a));
+        (cloudData.appointments || []).forEach((a: VaccineAppointment) => {
+          if (!apptMap.has(apptKey(a))) apptMap.set(apptKey(a), a);
+        });
+        const mergedAppts = Array.from(apptMap.values());
+
+        // 3. Persist to Dexie
+        await db.transaction('rw', [db.logs, db.children, db.appointments, db.caregivers, db.joinRequests], async () => {
+          await Promise.all([
+            db.logs.clear(),
+            db.children.clear(),
+            db.appointments.clear(),
+            db.caregivers.clear(),
+            db.joinRequests.clear()
+          ]);
+          await Promise.all([
+            db.logs.bulkAdd(mergedLogs),
+            db.children.bulkAdd(mergedChildren),
+            db.appointments.bulkAdd(mergedAppts),
+            db.caregivers.bulkAdd(mergedCaregivers),
+            db.joinRequests.bulkAdd(mergedRequests)
+          ]);
         });
 
-        // Update state
-        setLogs(cloudData.logs.sort((a: any, b: any) => b.timestamp - a.timestamp));
-        setChildren(cloudData.children);
-        setAppointments(cloudData.appointments);
-        if (cloudData.caregivers) setCaregivers(cloudData.caregivers);
-        if (cloudData.joinRequests) setJoinRequests(cloudData.joinRequests);
+        // 4. Update UI State
+        setLogs(mergedLogs.sort((a, b) => b.timestamp - a.timestamp));
+        setChildren(mergedChildren);
+        setAppointments(mergedAppts);
+        setCaregivers(mergedCaregivers);
+        setJoinRequests(mergedRequests);
+
+        console.log('✅ Bidirectional Sync Merge Complete');
       }
 
       setSyncStatus('idle');
@@ -273,7 +320,8 @@ const App: React.FC = () => {
       name: childData.name || 'Baby',
       dob: childData.dob || new Date().toISOString(),
       gender: childData.gender || 'boy',
-      photoUrl: childData.photoUrl || 'https://picsum.photos/200'
+      photoUrl: childData.photoUrl || 'https://picsum.photos/200',
+      updatedAt: Date.now()
     };
 
     await db.children.add(newChild);
@@ -378,15 +426,17 @@ const App: React.FC = () => {
 
   const handleSaveChild = async (childData: Partial<Child>) => {
     if (childData.id) {
-      await db.children.update(childData.id, childData);
-      setChildren(prev => prev.map(c => c.id === childData.id ? { ...c, ...childData } as Child : c));
+      const updates = { ...childData, updatedAt: Date.now() };
+      await db.children.update(childData.id, updates);
+      setChildren(prev => prev.map(c => c.id === childData.id ? { ...c, ...updates } as Child : c));
     } else {
       const newChild: Child = {
         id: `c${Date.now()}`,
         name: childData.name || 'Baby',
         dob: childData.dob || new Date().toISOString(),
         gender: childData.gender || 'boy',
-        photoUrl: childData.photoUrl || `https://picsum.photos/200?random=${Date.now()}`
+        photoUrl: childData.photoUrl || `https://picsum.photos/200?random=${Date.now()}`,
+        updatedAt: Date.now()
       };
       await db.children.add(newChild);
       setChildren(prev => [...prev, newChild]);
@@ -517,7 +567,8 @@ const App: React.FC = () => {
                 photoUrl: `https://picsum.photos/100?u=${req.userId}`,
                 accessLevel: 'Editor',
                 status: 'approved',
-                joinedAt: Date.now()
+                joinedAt: Date.now(),
+                updatedAt: Date.now()
               };
               await db.caregivers.add(newCaregiver);
               await db.joinRequests.delete(req.id);
@@ -553,12 +604,14 @@ const App: React.FC = () => {
           caregiver={editingCaregiver}
           onSave={async (updates) => {
             if (updates.id) {
-              await db.caregivers.update(updates.id, updates);
-              setCaregivers(caregivers.map(c => c.id === updates.id ? { ...c, ...updates } as Caregiver : c));
+              const fullUpdates = { ...updates, updatedAt: Date.now() };
+              await db.caregivers.update(updates.id, fullUpdates);
+              setCaregivers(caregivers.map(c => c.id === updates.id ? { ...c, ...fullUpdates } as Caregiver : c));
             } else {
               const newCaregiver = {
                 ...updates,
-                id: Date.now().toString()
+                id: Date.now().toString(),
+                updatedAt: Date.now()
               } as Caregiver;
               await db.caregivers.add(newCaregiver);
               setCaregivers([...caregivers, newCaregiver]);

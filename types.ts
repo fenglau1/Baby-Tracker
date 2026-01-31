@@ -19,6 +19,7 @@ export interface Caregiver {
   accessLevel: 'Owner' | 'Editor' | 'Viewer';
   status: 'pending' | 'approved';
   joinedAt: number;
+  updatedAt: number;
 }
 
 export interface JoinRequest {
@@ -37,6 +38,7 @@ export interface Child {
   dob: string;
   photoUrl: string;
   gender: 'boy' | 'girl';
+  updatedAt: number;
 }
 
 export interface LogEntry {
@@ -65,7 +67,7 @@ export interface AppState {
 }
 
 export const INITIAL_CHILDREN: Child[] = [
-  { id: 'c1', name: 'Leo', dob: '2023-09-15', photoUrl: 'https://picsum.photos/200?random=1', gender: 'boy' }
+  { id: 'c1', name: 'Leo', dob: '2023-09-15', photoUrl: 'https://picsum.photos/200?random=1', gender: 'boy', updatedAt: Date.now() }
 ];
 
 export const VACCINE_SCHEDULE = [
