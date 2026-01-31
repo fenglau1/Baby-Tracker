@@ -88,6 +88,8 @@ const App: React.FC = () => {
   // --- Notification Engine ---
   useEffect(() => {
     const checkReminders = () => {
+      if (typeof Notification === 'undefined') return;
+      
       const isNotifEnabled = localStorage.getItem('sunny_pref_notif') !== 'false';
       if (!isNotifEnabled || Notification.permission !== 'granted') return;
 
@@ -97,7 +99,7 @@ const App: React.FC = () => {
       appointments.forEach(appt => {
         const apptDate = new Date(appt.plannedDate).getTime();
         if (apptDate > now && apptDate <= next24h) {
-          const child = children.find(c => c.id === apptId(appt));
+          const child = children.find(c => c.id === (appt.childId || ''));
           const childName = child?.name || 'Baby';
 
           // Use a simple key to avoid duplicate pings in the same session
