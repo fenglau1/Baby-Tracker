@@ -6,14 +6,33 @@ const SCOPES = "https://www.googleapis.com/auth/drive.appdata";
 
 export const initGapi = () => {
     return new Promise((resolve, reject) => {
-        gapi.load('client:auth2', () => {
+        if (typeof gapi === 'undefined') {
+            console.error('GAPI not loaded in window. Check script tags.');
+            reject(new Error('GAPI not loaded'));
+            return;
+        }
+        gapi.load('client', () => {
+            console.log('GAPI client loading...');
             gapi.client.init({
-                clientId: CLIENT_ID,
                 discoveryDocs: DISCOVERY_DOCS,
-                scope: SCOPES,
-            }).then(resolve).catch(reject);
+            }).then(() => {
+                console.log('GAPI client initialized successfully');
+                resolve(true);
+            }).catch(err => {
+                console.error('GAPI init error:', err);
+                reject(err);
+            });
         });
     });
+};
+
+export const setGapiToken = (token: string) => {
+    if (gapi?.client) {
+        gapi.client.setToken({ access_token: token });
+        console.log('GAPI token has been set manually');
+    } else {
+        console.error('Cannot set GAPI token: client not initialized');
+    }
 };
 
 export const findOrCreateDatabaseFile = async () => {

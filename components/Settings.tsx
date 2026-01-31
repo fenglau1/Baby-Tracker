@@ -130,6 +130,16 @@ export const Settings: React.FC<SettingsProps> = ({
 
     const toggleNotifications = async () => {
         if (!notifications) {
+            // Check for Secure Context
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                showToast('Notifications require a secure (HTTPS) connection');
+                return;
+            }
+
+            if (!("Notification" in window)) {
+                showToast('Browser does not support notifications');
+                return;
+            }
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
                 showToast('Notification permission denied');

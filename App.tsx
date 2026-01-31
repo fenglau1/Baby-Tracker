@@ -13,7 +13,7 @@ import { FamilySettingsModal } from './components/FamilySettingsModal';
 import { Home, BarChart2, Settings as SettingsIcon, Plus, List, CloudOff, Cloud } from 'lucide-react';
 import gsap from 'gsap';
 import { db } from './services/db';
-import { initGapi, findOrCreateDatabaseFile, uploadData, downloadData } from './services/googleDriveService';
+import { initGapi, findOrCreateDatabaseFile, uploadData, downloadData, setGapiToken } from './services/googleDriveService';
 
 const safeParse = <T,>(key: string, fallback: T): T => {
   try {
@@ -149,6 +149,14 @@ const App: React.FC = () => {
         try {
           setSyncStatus('syncing');
           await initGapi();
+
+          const token = localStorage.getItem('sunnyBaby_googleToken');
+          if (token) {
+            setGapiToken(token);
+          } else {
+            console.warn('No Google token found in localStorage for sync');
+          }
+
           const fileId = await findOrCreateDatabaseFile();
 
           // 1. Download and Merge
@@ -201,6 +209,13 @@ const App: React.FC = () => {
       syncTimeoutRef.current = setTimeout(async () => {
         try {
           setSyncStatus('syncing');
+          await initGapi();
+
+          const token = localStorage.getItem('sunnyBaby_googleToken');
+          if (token) {
+            setGapiToken(token);
+          }
+
           const fileId = await findOrCreateDatabaseFile();
           await uploadData(fileId, {
             logs,
