@@ -16,48 +16,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       scope: 'https://www.googleapis.com/auth/drive.appdata',
    });
 
-   const containerRef = useRef<HTMLDivElement>(null);
-   const contentRef = useRef<HTMLDivElement>(null);
-   const logoRef = useRef<HTMLDivElement>(null);
-
-   useEffect(() => {
-      if (contentRef.current) {
-         const children = contentRef.current.children;
-         gsap.fromTo(children,
-            { y: 40, opacity: 0, scale: 0.95 },
-            {
-               y: 0,
-               opacity: 1,
-               scale: 1,
-               duration: 0.8,
-               stagger: 0.15,
-               ease: 'back.out(1.7)',
-               clearProps: 'all'
-            }
-         );
-      }
-
-      if (logoRef.current) {
-         gsap.to(logoRef.current, {
-            y: -8,
-            duration: 2.5,
-            repeat: -1,
-            yoyo: true,
-            ease: "power1.inOut"
-         });
-
-         gsap.to(logoRef.current, {
-            scale: 1.05,
-            duration: 3,
-            repeat: -1,
-            yoyo: true,
-            ease: "sine.inOut"
-         });
-      }
-   }, []);
-
    return (
-      <div ref={containerRef} className="min-h-screen bg-[#FFFBEB] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-[#FFFBEB] flex flex-col items-center justify-center p-6 relative overflow-hidden">
          {/* Animated Playful Pop Background Blobs */}
          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
             <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-yellow-200 rounded-full opacity-20 filter blur-3xl animate-blob"></div>
@@ -66,9 +26,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <div className="absolute top-[40%] left-[30%] w-[40%] h-[40%] bg-blue-100 rounded-full opacity-10 filter blur-2xl animate-blob animation-delay-6000"></div>
          </div>
 
-         <div ref={contentRef} className="relative z-10 bg-white p-10 rounded-[4rem] shadow-2xl w-full max-w-sm text-center border-4 border-white">
+         <div className="relative z-10 bg-white p-10 rounded-[4rem] shadow-2xl w-full max-w-sm text-center border-4 border-white">
             <div className="mb-10 flex justify-center">
-               <div ref={logoRef} className="w-42 h-42 relative group cursor-pointer">
+               <div className="w-42 h-42 relative group cursor-pointer">
                   {/* Outer Glow */}
                   <div className="absolute inset-0 bg-yellow-400/20 blur-2xl rounded-full scale-120 group-hover:scale-125 transition-transform" />
                   <img
