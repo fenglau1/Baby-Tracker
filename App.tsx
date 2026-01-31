@@ -269,20 +269,18 @@ const App: React.FC = () => {
             children,
             appointments,
             caregivers,
+            joinRequests,
             lastSync: Date.now()
           });
           setSyncStatus('idle');
+          console.log('📦 Cloud Backup Successful: All tables synced.');
         } catch (err: any) {
-          console.error('Push Sync Error Details:', {
-            message: err.message,
-            error: err.error,
-            details: err
-          });
+          console.error('Push Sync Error Details:', err);
           setSyncStatus('error');
         }
       }, 5000); // Wait 5s after last change
     }
-  }, [logs, children, appointments, isGoogleLinked]);
+  }, [logs, children, appointments, caregivers, joinRequests, isGoogleLinked]);
 
   useEffect(() => {
     if (contentRef.current) {
@@ -482,11 +480,13 @@ const App: React.FC = () => {
   };
 
   const handleClearData = async () => {
-    if (window.confirm('WARNING: This will permanently delete all your baby logs and information. Are you sure?')) {
-      await db.transaction('rw', db.logs, db.children, db.appointments, async () => {
+    if (window.confirm('WARNING: This will permanently delete all your baby logs, family info, and accounts. Are you sure?')) {
+      await db.transaction('rw', [db.logs, db.children, db.appointments, db.caregivers, db.joinRequests], async () => {
         await db.logs.clear();
         await db.children.clear();
         await db.appointments.clear();
+        await db.caregivers.clear();
+        await db.joinRequests.clear();
       });
       localStorage.clear();
       window.location.reload();
