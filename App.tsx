@@ -153,13 +153,17 @@ const App: React.FC = () => {
             setShowOnboarding(false);
           }
         } else {
+          console.log('📦 No children found in Dexie.');
+          // Even if localStorage says we finished onboarding, if we have NO children, 
+          // we MUST show onboarding again to create one.
+          setShowOnboarding(true);
+
           // Fallback to legacy
           const legacyChildren = safeParse('sunnyBaby_children', INITIAL_CHILDREN);
-          setChildren(legacyChildren);
-          setCurrentChildId(legacyChildren[0]?.id || 'c1');
-
-          if (legacyChildren.length > 0 && localStorage.getItem('sunnyBaby_onboardingComplete') !== 'true') {
-            localStorage.setItem('sunnyBaby_onboardingComplete', 'true');
+          if (legacyChildren && legacyChildren.length > 0) {
+            console.log('📦 Using legacy children fallback.');
+            setChildren(legacyChildren);
+            setCurrentChildId(legacyChildren[0].id);
             setShowOnboarding(false);
           }
         }
@@ -605,23 +609,15 @@ const App: React.FC = () => {
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
 
   if (isLoading) return (
-    <div className="h-screen w-full bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center animate-pulse">
-      <div className="w-24 h-24 bg-yellow-100 rounded-[2rem] mb-6 flex items-center justify-center">
-        <div className="w-12 h-12 bg-yellow-400 rounded-full animate-bounce" />
+    <div className="fixed inset-0 bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center z-[500] pointer-events-none">
+      <div className="w-16 h-16 bg-yellow-100 rounded-full mb-6 flex items-center justify-center animate-bounce">
+        <div className="w-4 h-4 bg-yellow-400 rounded-full" />
       </div>
-      <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Waking up the engine...</p>
+      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em]">SunnyBaby Loading...</p>
     </div>
   );
 
-  if (isLoggedIn && children.length === 0 && !showOnboarding) {
-    return (
-      <div className="fixed inset-0 bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center z-[400]">
-        <p className="text-slate-400 font-bold mb-4">No baby profile found.</p>
-        <button onClick={() => setShowOnboarding(true)} className="bg-orange-500 text-white px-8 py-3 rounded-full">Create Profile</button>
-      </div>
-    );
-  }
-  if (showOnboarding) return <Onboarding onComplete={handleOnboardingComplete} />;
+  if (showOnboarding || children.length === 0) return <Onboarding onComplete={handleOnboardingComplete} />;
 
   return (
     <div className="min-h-screen min-h-[100dvh] font-sans text-slate-800 select-none overflow-hidden relative">

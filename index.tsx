@@ -12,9 +12,7 @@ const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <React.StrictMode>
-    <GoogleOAuthProvider clientId={CLIENT_ID}>
-      <App />
-    </GoogleOAuthProvider>
-  </React.StrictMode>
+  <GoogleOAuthProvider clientId={CLIENT_ID}>
+    <App />
+  </GoogleOAuthProvider>
 );
