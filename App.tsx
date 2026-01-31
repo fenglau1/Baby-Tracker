@@ -606,10 +606,12 @@ const App: React.FC = () => {
     window.location.href = url.toString();
   };
 
+  // PRIORITY 1: LOGIN (Ensure this shows no matter what if not logged in)
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
 
+  // PRIORITY 2: DATA INITIALIZATION
   if (isLoading) return (
-    <div className="fixed inset-0 bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center z-[500] pointer-events-none">
+    <div className="fixed inset-0 bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center z-[500]">
       <div className="w-16 h-16 bg-yellow-100 rounded-full mb-6 flex items-center justify-center animate-bounce">
         <div className="w-4 h-4 bg-yellow-400 rounded-full" />
       </div>
@@ -617,6 +619,7 @@ const App: React.FC = () => {
     </div>
   );
 
+  // PRIORITY 3: ONBOARDING
   if (showOnboarding || children.length === 0) return <Onboarding onComplete={handleOnboardingComplete} />;
 
   return (
