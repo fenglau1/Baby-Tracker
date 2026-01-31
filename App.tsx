@@ -168,7 +168,7 @@ const App: React.FC = () => {
         setLogs(safeParse('babyTrackerLogs', []));
         setAppointments(safeParse('babyTrackerAppointments', []));
       } finally {
-        setIsLoading(false);
+        setTimeout(() => setIsLoading(false), 500); // Small delay to ensure state settles
       }
     };
     loadDataFromDexie();
@@ -196,24 +196,7 @@ const App: React.FC = () => {
       const newUrl = window.location.origin + window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
 
-      const toast = document.createElement('div');
-      toast.className = 'fixed top-40 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-8 py-5 rounded-[2.5rem] text-sm font-black shadow-2xl z-[400] border-4 border-yellow-400 pointer-events-none flex flex-col items-center gap-2 text-center';
-      toast.innerHTML = `
-        <span class="text-2xl">👋 Welcome!</span>
-        <span class="opacity-80">You've been invited to join a family!</span>
-        <span class="bg-yellow-400 text-slate-800 px-3 py-1 rounded-full mt-2">Code: ${invite}</span>
-      `;
-      document.body.appendChild(toast);
-
-      gsap.fromTo(toast, { y: 100, opacity: 0, scale: 0.8 }, { y: 0, opacity: 1, scale: 1, duration: 1, ease: 'back.out(1.7)' });
-      setTimeout(() => {
-        gsap.to(toast, { opacity: 0, y: -40, scale: 0.9, duration: 0.5, onComplete: () => toast.remove() });
-      }, 5000);
-
-      // If not logged in, we could potentially use this to auto-fill something or just warn them
-      if (!isLoggedIn) {
-        console.log("Invite received, but user not logged in yet:", invite);
-      }
+      showToast(`Welcome! You've been invited.`);
     }
   }, [isLoggedIn]);
 
@@ -357,8 +340,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (contentRef.current) {
       gsap.fromTo(contentRef.current,
-        { opacity: 0, x: 20, filter: 'blur(10px)' },
-        { opacity: 1, x: 0, filter: 'blur(0px)', duration: 0.5, ease: 'expo.out' }
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' }
       );
     }
   }, [view]);
@@ -618,12 +601,13 @@ const App: React.FC = () => {
   };
 
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
-  if (isLoading) return (
-    <div className="h-screen w-full bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center animate-pulse">
-      <div className="w-24 h-24 bg-yellow-100 rounded-[2rem] mb-6 flex items-center justify-center">
-        <div className="w-12 h-12 bg-yellow-400 rounded-full animate-bounce" />
+
+  if (isLoading || (isLoggedIn && children.length === 0)) return (
+    <div className="h-[100dvh] w-full bg-[#FFFBEB] flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-24 h-24 bg-yellow-100 rounded-[3rem] mb-6 flex items-center justify-center shadow-inner">
+        <div className="w-4 h-4 bg-yellow-400 rounded-full animate-bounce" />
       </div>
-      <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Waking up the engine...</p>
+      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] animate-pulse">Initializing SunnyBaby...</p>
     </div>
   );
   if (showOnboarding) return <Onboarding onComplete={handleOnboardingComplete} />;
@@ -650,7 +634,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <div className="max-w-md mx-auto h-screen relative flex flex-col z-10">
+      <div className="max-w-md mx-auto h-[100dvh] relative flex flex-col z-10 overflow-hidden">
         <div className="flex-1 overflow-hidden relative" ref={contentRef}>
           {view === 'dashboard' && currentChild && (
             <Dashboard
