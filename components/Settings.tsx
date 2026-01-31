@@ -138,7 +138,27 @@ export const Settings: React.FC<SettingsProps> = ({
         }
         const newState = !notifications;
         setNotifications(newState);
-        showToast(newState ? 'Notifications Enabled' : 'Notifications Disabled');
+        showToast(newState ? 'Notifications enabled!' : 'Notifications disabled');
+
+        if (newState) {
+            handleTestNotification();
+        }
+    };
+
+    const handleTestNotification = () => {
+        if (!("Notification" in window)) {
+            showToast('Browser does not support notifications');
+            return;
+        }
+
+        if (Notification.permission === 'granted') {
+            new Notification('✨ SunnyBaby', {
+                body: 'Hooray! Notifications are working on your device.',
+                icon: '/assets/baby_mascot_clean.png',
+            });
+        } else {
+            showToast('Please allow notification permission first');
+        }
     };
 
     const handleExport = () => {
@@ -384,6 +404,15 @@ export const Settings: React.FC<SettingsProps> = ({
                     </div>
                     <ChevronRight size={20} className="text-slate-300" />
                 </button>
+                {notifications && (
+                    <button onClick={handleTestNotification} className="w-full bg-white/70 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm border border-white flex items-center justify-between active:scale-[0.98] transition-transform hover:bg-white/90">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-yellow-100 text-yellow-500 rounded-xl"><Sparkles size={20} /></div>
+                            <span className="font-bold text-slate-700 text-sm">Test Notification</span>
+                        </div>
+                        <ChevronRight size={20} className="text-slate-300" />
+                    </button>
+                )}
                 <button onClick={() => setIsPrivacyModalOpen(true)} className="w-full bg-white/70 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm border border-white flex items-center justify-between active:scale-[0.98] transition-transform hover:bg-white/90">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-blue-100 text-blue-500 rounded-xl"><FileText size={20} /></div>

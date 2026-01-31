@@ -76,11 +76,23 @@ const App: React.FC = () => {
           setAppointments(dbAppts);
           setCaregivers(dbCaregivers);
           setCurrentChildId(dbChildren[0].id);
+
+          // Auto-skip onboarding if we have data
+          if (localStorage.getItem('sunnyBaby_onboardingComplete') !== 'true') {
+            localStorage.setItem('sunnyBaby_onboardingComplete', 'true');
+            setShowOnboarding(false);
+          }
         } else {
           // Fallback to legacy localStorage or initial
           const legacyChildren = safeParse('sunnyBaby_children', INITIAL_CHILDREN);
           setChildren(legacyChildren);
           setCurrentChildId(legacyChildren[0]?.id || 'c1');
+
+          // If legacy data exists, skip onboarding too
+          if (legacyChildren.length > 0 && localStorage.getItem('sunnyBaby_onboardingComplete') !== 'true') {
+            localStorage.setItem('sunnyBaby_onboardingComplete', 'true');
+            setShowOnboarding(false);
+          }
         }
       } catch (err) {
         console.error('Dexie load error, falling back to localStorage:', err);
@@ -99,6 +111,12 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const invite = params.get('invite');
     if (invite) {
+      // Auto-skip onboarding if invited
+      if (showOnboarding) {
+        localStorage.setItem('sunnyBaby_onboardingComplete', 'true');
+        setShowOnboarding(false);
+      }
+
       // Clear the param from URL without refreshing
       const newUrl = window.location.origin + window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
@@ -157,9 +175,18 @@ const App: React.FC = () => {
           }
 
           setSyncStatus('idle');
-        } catch (err) {
-          console.error('Sync error:', err);
+        } catch (err: any) {
+          console.error('Initial Sync Error Details:', {
+            message: err.message,
+            result: err.result,
+            error: err.error,
+            details: err
+          });
           setSyncStatus('error');
+
+          // Show a slightly more detailed toast for deep debugging
+          const errorMsg = err.result?.error?.message || err.message || 'Unknown sync error';
+          console.error(`Detailed Sync Error: ${errorMsg}`);
         }
       };
       syncWithDrive();
@@ -183,7 +210,12 @@ const App: React.FC = () => {
             lastSync: Date.now()
           });
           setSyncStatus('idle');
-        } catch (err) {
+        } catch (err: any) {
+          console.error('Push Sync Error Details:', {
+            message: err.message,
+            error: err.error,
+            details: err
+          });
           setSyncStatus('error');
         }
       }, 5000); // Wait 5s after last change
