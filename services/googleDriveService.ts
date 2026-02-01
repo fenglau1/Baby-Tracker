@@ -14,9 +14,11 @@ export const initGapi = () => {
         gapi.load('client', () => {
             console.log('GAPI client loading...');
             gapi.client.init({
+                clientId: CLIENT_ID,
+                scope: SCOPES,
                 discoveryDocs: DISCOVERY_DOCS,
             }).then(() => {
-                console.log('GAPI client initialized successfully');
+                console.log('GAPI client initialized successfully with context');
                 // Ensure drive client is also ready
                 if (!gapi.client.drive) {
                     console.log('Sync Detail: Drive client not auto-loaded, loading now...');

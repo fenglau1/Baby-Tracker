@@ -350,6 +350,10 @@ const App: React.FC = () => {
         } catch (err: any) {
           console.error('Push Sync Error Details:', err);
           setSyncStatus('error');
+          const errMsg = err.result?.error?.message || err.message || '';
+          if (errMsg.includes('401') || errMsg.includes('credentials')) {
+            showToast('Cloud session expired. Please Re-Link in Menu.');
+          }
         }
       }, 5000); // Wait 5s after last change
     }
