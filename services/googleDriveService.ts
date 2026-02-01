@@ -17,9 +17,13 @@ export const initGapi = () => {
                 discoveryDocs: DISCOVERY_DOCS,
             }).then(() => {
                 console.log('GAPI client initialized successfully');
+                // Ensure drive client is also ready
+                if (!gapi.client.drive) {
+                    console.log('Sync Detail: Drive client not auto-loaded, loading now...');
+                }
                 resolve(true);
             }).catch(err => {
-                console.error('GAPI init error:', err);
+                console.error('GAPI init error. Potential Safari Privacy Block:', err);
                 reject(err);
             });
         });

@@ -89,7 +89,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkReminders = () => {
       if (typeof Notification === 'undefined') return;
-      
+
       const isNotifEnabled = localStorage.getItem('sunny_pref_notif') !== 'false';
       if (!isNotifEnabled || Notification.permission !== 'granted') return;
 
@@ -303,6 +303,15 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error('Cloud Sync Error:', err);
       setSyncStatus('error');
+
+      const errMsg = err.result?.error?.message || err.message || 'Unknown error';
+      if (errMsg.includes('401') || errMsg.includes('unauthenticated')) {
+        showToast('Google session expired. Please re-login in Menu.');
+        setIsGoogleLinked(false);
+        localStorage.removeItem('sunnyBaby_googleToken');
+      } else {
+        showToast(`Sync Error: ${errMsg}`);
+      }
     }
   };
 
