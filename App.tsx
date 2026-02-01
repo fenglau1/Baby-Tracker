@@ -11,6 +11,7 @@ import { Background } from './components/Background';
 import { BabySettingsModal } from './components/BabySettingsModal';
 import { FamilySettingsModal } from './components/FamilySettingsModal';
 import { Home, BarChart2, Settings as SettingsIcon, Plus, List, CloudOff, Cloud } from 'lucide-react';
+import { useGoogleLogin } from '@react-oauth/google';
 import gsap from 'gsap';
 import { db } from './services/db';
 import { initGapi, findOrCreateDatabaseFile, uploadData, downloadData, setGapiToken } from './services/googleDriveService';
@@ -60,6 +61,8 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTokenExpired, setIsTokenExpired] = useState(false);
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -299,14 +302,15 @@ const App: React.FC = () => {
       }
 
       setSyncStatus('idle');
+      setIsTokenExpired(false);
       console.log('🏁 Sync sequence completed');
     } catch (err: any) {
       console.error('Cloud Sync Error:', err);
       setSyncStatus('error');
 
       const errMsg = err.result?.error?.message || err.message || 'Unknown error';
-      if (errMsg.includes('401') || errMsg.includes('unauthenticated')) {
-        showToast('Google session expired. Please re-login in Menu.');
+      if (errMsg.includes('401') || errMsg.includes('unauthenticated') || errMsg.includes('credentials')) {
+        setIsTokenExpired(true);
         setIsGoogleLinked(false);
         localStorage.removeItem('sunnyBaby_googleToken');
       } else {
@@ -352,7 +356,9 @@ const App: React.FC = () => {
           setSyncStatus('error');
           const errMsg = err.result?.error?.message || err.message || '';
           if (errMsg.includes('401') || errMsg.includes('credentials')) {
-            showToast('Cloud session expired. Please Re-Link in Menu.');
+            setIsTokenExpired(true);
+            setIsGoogleLinked(false);
+            localStorage.removeItem('sunnyBaby_googleToken');
           }
         }
       }, 5000); // Wait 5s after last change
@@ -433,6 +439,15 @@ const App: React.FC = () => {
 
   const childLogs = logs.filter(l => l.childId === currentChild?.id).sort((a, b) => b.timestamp - a.timestamp);
   const childAppointments = appointments.filter(a => a.childId === currentChild?.id);
+
+  const triggerRelink = useGoogleLogin({
+    onSuccess: tokenResponse => {
+      handleLogin(tokenResponse.access_token);
+      setIsTokenExpired(false);
+      showToast('Cloud Sync Restored! ✨');
+    },
+    scope: 'https://www.googleapis.com/auth/drive.appdata',
+  });
 
   const addLog = async (entry: Partial<LogEntry>) => {
     if (!currentChild) return;
@@ -641,6 +656,29 @@ const App: React.FC = () => {
     <div className="min-h-screen min-h-[100dvh] font-sans text-slate-800 select-none overflow-hidden relative">
       <Background />
 
+      {/* Seamless Relink Banner */}
+      {isTokenExpired && (
+        <div className="fixed top-20 left-6 right-6 z-[200] animate-in slide-in-from-top-10 duration-500">
+          <button
+            onClick={() => triggerRelink()}
+            className="w-full bg-orange-600 text-white p-4 rounded-3xl shadow-2xl border-4 border-white flex items-center justify-between gap-3 group active:scale-95 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
+                <Cloud size={20} className="text-white" />
+              </div>
+              <div className="text-left">
+                <p className="font-black text-xs uppercase tracking-widest leading-none mb-1">Backup Paused</p>
+                <p className="text-[10px] font-bold opacity-80">Google session expired. Tap to Resume.</p>
+              </div>
+            </div>
+            <div className="bg-white text-orange-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider group-hover:bg-orange-50 transition-colors">
+              Reconnect
+            </div>
+          </button>
+        </div>
+      )}
+
       {/* Cloud Status Indicator */}
       {isGoogleLinked && (
         <div className={`fixed top-4 right-4 z-[100] px-3 py-1.5 rounded-full backdrop-blur-md flex items-center gap-2 text-[10px] font-black uppercase tracking-wider border transition-all duration-500 ${syncStatus === 'syncing' ? 'bg-orange-400/20 border-orange-400/50 text-orange-600' :
@@ -684,6 +722,7 @@ const App: React.FC = () => {
             onLinkGoogle={handleLogin}
             onClearData={handleClearData}
             isGoogleLinked={isGoogleLinked}
+            isTokenExpired={isTokenExpired}
             onAddCaregiver={async (c) => {
               await db.caregivers.add(c);
               setCaregivers([...caregivers, c]);
