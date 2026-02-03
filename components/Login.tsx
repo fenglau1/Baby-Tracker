@@ -1,20 +1,31 @@
 import React, { useRef, useEffect } from 'react';
 import { Button3D } from './Button3D';
 import babyMascot from '../assets/baby_mascot_clean-removebg-preview.png';
-import { useGoogleLogin } from '@react-oauth/google';
 import gsap from 'gsap';
 
 interface LoginProps {
-   onLogin: (token?: string) => void;
+   onLogin: (username: string, password: string, remember: boolean) => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
-   const login = useGoogleLogin({
-      onSuccess: tokenResponse => {
-         onLogin(tokenResponse.access_token);
-      },
-      scope: 'https://www.googleapis.com/auth/drive.appdata',
-   });
+   const [username, setUsername] = React.useState('');
+   const [password, setPassword] = React.useState('');
+   const [remember, setRemember] = React.useState(true);
+   const [error, setError] = React.useState<string | null>(null);
+   const [isLoading, setIsLoading] = React.useState(false);
+
+   const handleLogin = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!username || !password) {
+         setError('Please enter both username and password');
+         return;
+      }
+      setIsLoading(true);
+      setError(null);
+      // We pass back the values to App.tsx which handles the actual Appwrite call
+      onLogin(username, password, remember);
+      // Loading will be handled by App.tsx redirect/failure
+   };
 
    return (
       <div className="min-h-screen bg-[#FFFBEB] flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -45,36 +56,73 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                <span className="text-slate-400 text-sm font-bold uppercase tracking-widest">All in one place.</span>
             </p>
 
-            <div className="space-y-6">
-               <Button3D variant="white" fullWidth onClick={() => login()} className="py-5 text-slate-700">
-                  <div className="flex items-center justify-center gap-4">
-                     <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                           <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                           <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                           <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                        </svg>
+            <form onSubmit={handleLogin} className="space-y-4">
+               {error && (
+                  <div className="bg-red-50 text-red-600 text-[10px] font-black uppercase p-3 rounded-2xl animate-in shake-in duration-300">
+                     ⚠️ {error}
+                  </div>
+               )}
+
+               <div className="space-y-2">
+                  <input
+                     type="text"
+                     placeholder="Username"
+                     value={username}
+                     onChange={(e) => setUsername(e.target.value)}
+                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black text-slate-700 focus:outline-none focus:border-yellow-400 transition-all placeholder:text-slate-300"
+                  />
+                  <input
+                     type="password"
+                     placeholder="Password"
+                     value={password}
+                     onChange={(e) => setPassword(e.target.value)}
+                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black text-slate-700 focus:outline-none focus:border-yellow-400 transition-all placeholder:text-slate-300"
+                  />
+               </div>
+
+               <div className="flex items-center justify-between px-2">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                     <div className="relative">
+                        <input
+                           type="checkbox"
+                           checked={remember}
+                           onChange={(e) => setRemember(e.target.checked)}
+                           className="peer sr-only"
+                        />
+                        <div className="w-5 h-5 border-2 border-slate-200 rounded-lg group-hover:border-yellow-400 transition-colors peer-checked:bg-yellow-400 peer-checked:border-yellow-400"></div>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 peer-checked:opacity-100 transition-opacity">
+                           <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
+                              <path d="M5 13l4 4L19 7" />
+                           </svg>
+                        </div>
                      </div>
-                     <span className="font-black tracking-tight">Sign in with Google</span>
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Remember Me</span>
+                  </label>
+               </div>
+
+               <Button3D variant="primary" fullWidth type="submit" disabled={isLoading} className="py-5 text-white">
+                  <div className="flex items-center justify-center gap-4">
+                     <span className="font-black tracking-tight uppercase">
+                        {isLoading ? 'Signing In...' : 'Sign In'}
+                     </span>
                   </div>
                </Button3D>
+            </form>
 
-               <div className="flex flex-col items-center gap-2 opacity-40">
-                  <div className="flex gap-4">
+            <div className="flex flex-col items-center gap-2 opacity-40">
+               <div className="flex gap-4">
 
-                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
-                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
-                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
-                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
-                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
-                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
-                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] px-4">
-                     Private • Secure • Synced
-                  </p>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
                </div>
+               <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] px-4">
+                  Private • Secure • Synced
+               </p>
             </div>
          </div>
       </div>

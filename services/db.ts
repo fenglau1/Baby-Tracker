@@ -1,12 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import { LogEntry, Child, VaccineAppointment, Caregiver, JoinRequest } from '../types';
+import { LogEntry, Child, VaccineAppointment, Caregiver } from '../types';
 
 export class BabyTrackerDB extends Dexie {
     logs!: Table<LogEntry>;
     children!: Table<Child>;
     appointments!: Table<VaccineAppointment>;
     caregivers!: Table<Caregiver>;
-    joinRequests!: Table<JoinRequest>;
 
     constructor() {
         // Using a more unique name to avoid conflicts and version(3) to force a schema update
@@ -15,8 +14,7 @@ export class BabyTrackerDB extends Dexie {
             logs: 'id, childId, type, timestamp',
             children: 'id, name',
             appointments: '[childId+vaccineName]',
-            caregivers: 'id, name, email, status',
-            joinRequests: 'id, inviteCode, status, userId'
+            caregivers: 'id, name, email, status'
         });
     }
 }

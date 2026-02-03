@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Download, ChevronRight, LogOut, ToggleRight, ToggleLeft, Scale, Edit2, Save, Plus, Share2, Copy, Check, Users, FileText, Camera, Sparkles, Trash2, UserPlus } from 'lucide-react';
+import { Bell, Download, ChevronRight, LogOut, ToggleRight, ToggleLeft, Scale, Edit2, Save, Plus, Share2, Copy, Check, Users, FileText, Camera, Sparkles, Trash2, UserPlus, Cloud } from 'lucide-react';
 import { Button3D } from './Button3D';
-import { LogEntry, Child, Caregiver, JoinRequest } from '../types';
+import { LogEntry, Child, Caregiver } from '../types';
 import gsap from 'gsap';
-import { useGoogleLogin } from '@react-oauth/google';
 import { PrivacyModal } from './PrivacyModal';
 
 interface SettingsProps {
@@ -12,19 +11,14 @@ interface SettingsProps {
     caregivers: Caregiver[];
     onAddChild: () => void;
     onEditChild: (child: Child) => void;
-    onLinkGoogle: (token: string) => void;
+    onLinkCloud: () => void;
     onClearData: () => void;
-    isGoogleLinked?: boolean;
-    isTokenExpired?: boolean;
+    isCloudLinked?: boolean;
     onAddCaregiver: (caregiver: Caregiver) => void;
     onDeleteCaregiver: (id: string) => void;
     onUpdateCaregiver: (id: string, updates: Partial<Caregiver>) => void;
     onAddCaregiverClick: () => void;
     onEditCaregiverClick: (caregiver: Caregiver) => void;
-    joinRequests: JoinRequest[];
-    onJoinFamily: (code: string) => void;
-    onApproveRequest: (request: JoinRequest) => void;
-    onDenyRequest: (request: JoinRequest) => void;
     profile: { name: string; email: string; photoUrl: string };
     onUpdateProfile: (profile: { name: string; email: string; photoUrl: string }) => void;
     onHardRefresh: () => void;
@@ -37,30 +31,19 @@ export const Settings: React.FC<SettingsProps> = ({
     caregivers,
     onAddChild,
     onEditChild,
-    onLinkGoogle,
+    onLinkCloud,
     onClearData,
-    isGoogleLinked,
-    isTokenExpired,
+    isCloudLinked,
     onAddCaregiver, // Still here for backward compatibility if needed, but not used in UI now
     onDeleteCaregiver,
     onUpdateCaregiver,
     onAddCaregiverClick,
     onEditCaregiverClick,
-    joinRequests,
-    onJoinFamily,
-    onApproveRequest,
-    onDenyRequest,
     profile: initialProfile,
     onUpdateProfile,
     onHardRefresh,
     version
 }) => {
-    const login = useGoogleLogin({
-        onSuccess: tokenResponse => {
-            onLinkGoogle(tokenResponse.access_token);
-        },
-        scope: 'https://www.googleapis.com/auth/drive.appdata',
-    });
 
     // --- Persistent State Logic ---
     const [metric, setMetric] = useState(() => localStorage.getItem('sunny_pref_metric') !== 'false');
@@ -74,9 +57,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
     const [isEditing, setIsEditing] = useState(false);
     const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
-    const [inviteCode] = useState(() => 'BABY-' + Math.random().toString(36).substring(2, 7).toUpperCase());
-    const [manualCode, setManualCode] = useState('');
-    const [isJoining, setIsJoining] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Persist effects
@@ -183,54 +163,7 @@ export const Settings: React.FC<SettingsProps> = ({
         showToast('Data export started...');
     };
 
-    const handleInvite = async () => {
-        const url = new URL(window.location.origin);
-        url.searchParams.set('invite', inviteCode);
-
-        const shareData = {
-            title: 'Join my Baby Tracker Family',
-            text: `Join me on Baby Tracker to track our little one together!`,
-            url: url.toString(),
-        };
-
-        try {
-            if (navigator.share) {
-                await navigator.share(shareData);
-                showToast('Invite sheet opened!');
-            } else {
-                await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
-                showToast('Invite copied to clipboard!');
-            }
-        } catch (err) {
-            try {
-                await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
-                showToast('Invite copied to clipboard!');
-            } catch (e) {
-                showToast('Could not share invite.');
-            }
-        }
-    };
-
-    const handleManualJoin = () => {
-        if (!manualCode.trim()) {
-            showToast('Please enter a code');
-            return;
-        }
-        onJoinFamily(manualCode.toUpperCase());
-        setManualCode('');
-        setIsJoining(false);
-    };
-
-    const isOwner = profile.email === caregivers.find(c => c.isMain)?.email || caregivers.length === 0;
-
-    const handleCopyCode = async () => {
-        try {
-            await navigator.clipboard.writeText(inviteCode);
-            showToast('Family code copied!');
-        } catch (e) {
-            showToast('Failed to copy code');
-        }
-    };
+    const isOwner = true; // Always owner in internal use
 
     return (
         <div className="flex flex-col h-full px-6 pt-10 pb-48 overflow-y-auto">
@@ -324,35 +257,21 @@ export const Settings: React.FC<SettingsProps> = ({
             {/* Cloud & Backup */}
             <div className="space-y-4 mb-8">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2">Cloud & Backup</h3>
-                <div className={`bg-white/70 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm border border-white flex flex-col gap-4 transition-all ${isTokenExpired ? 'ring-2 ring-orange-400 bg-orange-50/50' : isGoogleLinked ? 'ring-2 ring-green-100' : 'ring-2 ring-orange-100'}`}>
+                <div className={`bg-white/70 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm border border-white flex flex-col gap-4 transition-all ${isCloudLinked ? 'ring-2 ring-green-100' : 'ring-2 ring-orange-100'}`}>
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className={`p-2.5 rounded-xl ${isTokenExpired ? 'bg-orange-500 text-white animate-pulse' : isGoogleLinked ? 'bg-green-100 text-green-500' : 'bg-orange-100 text-orange-500'}`}>
-                                <Sparkles size={20} />
+                            <div className={`p-2.5 rounded-xl ${isCloudLinked ? 'bg-green-100 text-green-500' : 'bg-orange-100 text-orange-500'}`}>
+                                <Cloud size={20} />
                             </div>
                             <div className="flex flex-col">
-                                <span className="font-bold text-slate-700 text-sm">Google Drive Sync</span>
-                                <span className={`text-[10px] font-bold ${isTokenExpired ? 'text-orange-600' : 'text-slate-400'}`}>
-                                    {isTokenExpired ? 'Session Expired • Reconnect' : isGoogleLinked ? 'Connected & Protecting' : 'Not Connected'}
+                                <span className="font-bold text-slate-700 text-sm">Appwrite Internal Sync</span>
+                                <span className={`text-[10px] font-bold text-slate-400`}>
+                                    {isCloudLinked ? 'Connected & Synced' : 'Not Connected'}
                                 </span>
                             </div>
                         </div>
-                        <div className={`w-3 h-3 rounded-full ${isTokenExpired ? 'bg-orange-600 animate-ping' : isGoogleLinked ? 'bg-green-500 animate-pulse' : 'bg-orange-400'}`} />
+                        <div className={`w-3 h-3 rounded-full ${isCloudLinked ? 'bg-green-500 animate-pulse' : 'bg-orange-400'}`} />
                     </div>
-
-                    <Button3D variant={isTokenExpired ? 'primary' : 'white'} fullWidth className="py-3 text-slate-700" onClick={() => login()}>
-                        <div className="flex items-center justify-center gap-3 text-xs">
-                            <svg className={`w-4 h-4 ${isTokenExpired ? 'text-white' : ''}`} viewBox="0 0 24 24">
-                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill={isTokenExpired ? 'currentColor' : '#4285F4'} />
-                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill={isTokenExpired ? 'currentColor' : '#34A853'} />
-                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill={isTokenExpired ? 'currentColor' : '#FBBC05'} />
-                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill={isTokenExpired ? 'currentColor' : '#EA4335'} />
-                            </svg>
-                            <span className={isTokenExpired ? 'text-white font-black' : ''}>
-                                {isTokenExpired ? 'Restore Connection Now' : isGoogleLinked ? 'Re-Link Google Account' : 'Link Google Account'}
-                            </span>
-                        </div>
-                    </Button3D>
                 </div>
             </div>
 
@@ -382,122 +301,6 @@ export const Settings: React.FC<SettingsProps> = ({
                 </button>
             </div>
 
-            {/* Family Management */}
-            <div className="space-y-4 mb-8">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2">Family & Caregivers</h3>
-                <div className="bg-white/70 backdrop-blur-md rounded-[2rem] p-6 shadow-sm border border-white relative overflow-hidden">
-                    <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-4">
-                            <h4 className="font-black text-slate-800 text-lg">Manage Family</h4>
-                            <button
-                                onClick={onAddCaregiverClick}
-                                className="p-2 bg-yellow-400 text-yellow-950 rounded-xl hover:scale-105 active:scale-95 transition-all shadow-sm flex items-center gap-2"
-                            >
-                                <UserPlus size={18} />
-                                <span className="text-xs font-black uppercase tracking-wider pr-1">Add Member</span>
-                            </button>
-                        </div>
-
-                        {caregivers.length === 0 ? (
-                            <p className="text-xs text-slate-400 font-bold italic py-4 text-center">No other family members added yet.</p>
-                        ) : (
-                            <div className="space-y-4">
-                                {caregivers.map(c => (
-                                    <div
-                                        key={c.id}
-                                        onClick={() => onEditCaregiverClick(c)}
-                                        className="bg-white/50 p-4 rounded-2xl border border-white/50 group/item transition-all hover:bg-white/80 cursor-pointer active:scale-[0.99]"
-                                    >
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-3">
-                                                <div className="relative">
-                                                    <img src={c.photoUrl} className="w-12 h-12 rounded-xl border-2 border-white shadow-sm" alt={c.name} />
-                                                    <div className="absolute inset-0 bg-black/0 group-hover/item:bg-black/5 rounded-xl transition-colors flex items-center justify-center">
-                                                        <Edit2 size={12} className="text-white opacity-0 group-hover/item:opacity-100" />
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-black text-slate-700">{c.name}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400 truncate max-w-[120px]">{c.email}</p>
-                                                </div>
-                                            </div>
-                                            <div className="px-2 py-1 bg-slate-100 rounded-lg">
-                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{c.accessLevel}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-[10px] font-bold text-slate-400 italic">"{c.role}"</p>
-                                            <div className="text-[9px] font-black text-yellow-600 uppercase tracking-widest bg-yellow-50 px-2 py-0.5 rounded-md">
-                                                Syncing
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col gap-3">
-                            {isOwner && joinRequests.length > 0 && (
-                                <div className="mb-4 space-y-3">
-                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pending Requests</h5>
-                                    {joinRequests.map(req => (
-                                        <div key={req.id} className="bg-yellow-50 border border-yellow-100 rounded-2xl p-4 flex items-center justify-between animate-in zoom-in-95 duration-200">
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-black text-slate-700">{req.userName}</span>
-                                                <span className="text-[10px] font-bold text-slate-400">{req.userEmail}</span>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => onApproveRequest(req)} className="p-2 bg-green-500 text-white rounded-xl shadow-sm active:scale-95 transition-all"><Check size={16} strokeWidth={3} /></button>
-                                                <button onClick={() => onDenyRequest(req)} className="p-2 bg-red-500 text-white rounded-xl shadow-sm active:scale-95 transition-all"><Trash2 size={16} /></button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div className="flex flex-col gap-3">
-                                <div className="bg-slate-800 rounded-2xl p-4 flex items-center justify-between group cursor-pointer active:scale-[0.99] transition-transform shadow-lg" onClick={handleCopyCode}>
-                                    <div className="flex flex-col">
-                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Family Code</span>
-                                        <code className="text-yellow-400 font-mono text-xl font-black tracking-wider">{inviteCode}</code>
-                                    </div>
-                                    <Copy size={18} className="text-slate-400 group-hover:text-white transition-colors" />
-                                </div>
-                                <Button3D variant="primary" fullWidth onClick={handleInvite} className="py-3">
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <Share2 size={18} />
-                                        <span>Share Invite Link</span>
-                                    </div>
-                                </Button3D>
-                            </div>
-
-                            <div className="mt-4 pt-4 border-t border-slate-100/50">
-                                {isJoining ? (
-                                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                        <input
-                                            value={manualCode}
-                                            onChange={(e) => setManualCode(e.target.value)}
-                                            placeholder="ENTER CODE (e.g. BABY-XYZ)"
-                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-sm font-black text-slate-700 focus:outline-none focus:border-yellow-400 transition-all uppercase placeholder:normal-case"
-                                        />
-                                        <div className="flex gap-2">
-                                            <Button3D variant="primary" fullWidth onClick={handleManualJoin} className="py-3">Join Now</Button3D>
-                                            <button onClick={() => setIsJoining(false)} className="px-6 text-slate-400 font-black text-xs uppercase">Cancel</button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={() => setIsJoining(true)}
-                                        className="w-full py-4 rounded-2xl border-2 border-slate-100 border-dashed text-slate-400 font-black text-xs uppercase tracking-widest hover:border-slate-200 hover:text-slate-500 transition-all"
-                                    >
-                                        Join Existing Family
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             {/* Data & Support */}
             <div className="space-y-3 mb-8">
@@ -536,7 +339,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">Version {version} • Baby Tracker</p>
                 <div className="flex flex-col gap-3 items-center">
                     <button onClick={onClearData} className="inline-flex items-center gap-2 text-slate-400 hover:text-red-500 font-black text-xs uppercase tracking-wider bg-slate-50 hover:bg-red-50 px-6 py-3 rounded-full transition-all">Clear All Data</button>
-                    <button onClick={() => { if (window.confirm('Are you sure you want to log out? Local data will remain.')) { localStorage.removeItem('sunnyBaby_isLoggedIn'); window.location.reload(); } }} className="inline-flex items-center gap-2 text-red-500 hover:text-white font-black text-xs uppercase tracking-wider bg-red-50 hover:bg-red-500 px-6 py-3 rounded-full transition-all border border-red-100"><LogOut size={14} strokeWidth={3} /> Log Out</button>
+                    <button onClick={() => { if (window.confirm('Are you sure you want to log out? Local records will remain.')) { localStorage.clear(); window.location.reload(); } }} className="inline-flex items-center gap-2 text-red-500 hover:text-white font-black text-xs uppercase tracking-wider bg-red-50 hover:bg-red-500 px-6 py-3 rounded-full transition-all border border-red-100"><LogOut size={14} strokeWidth={3} /> Log Out</button>
                 </div>
             </div>
         </div>

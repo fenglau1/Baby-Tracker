@@ -22,15 +22,6 @@ export interface Caregiver {
   updatedAt: number;
 }
 
-export interface JoinRequest {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  inviteCode: string;
-  status: 'pending' | 'approved' | 'denied';
-  timestamp: number;
-}
 
 export interface Child {
   id: string;

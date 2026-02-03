@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { INITIAL_CHILDREN, LogEntry, Child, ActivityType, VaccineAppointment, Caregiver, JoinRequest } from './types';
+import { INITIAL_CHILDREN, LogEntry, Child, ActivityType, VaccineAppointment, Caregiver } from './types';
 import { Dashboard } from './components/Dashboard';
 import { Analytics } from './components/Analytics';
 import { Activity } from './components/Activity';
@@ -11,10 +11,8 @@ import { Background } from './components/Background';
 import { BabySettingsModal } from './components/BabySettingsModal';
 import { FamilySettingsModal } from './components/FamilySettingsModal';
 import { Home, BarChart2, Settings as SettingsIcon, Plus, List, CloudOff, Cloud } from 'lucide-react';
-import { useGoogleLogin } from '@react-oauth/google';
-import gsap from 'gsap';
 import { db } from './services/db';
-import { initGapi, findOrCreateDatabaseFile, uploadData, downloadData, setGapiToken } from './services/googleDriveService';
+import * as appwrite from './services/appwriteService';
 
 const APP_VERSION = '2026.1.2';
 
@@ -30,13 +28,8 @@ const safeParse = <T,>(key: string, fallback: T): T => {
 };
 
 const App: React.FC = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    return localStorage.getItem('sunnyBaby_isLoggedIn') === 'true';
-  });
-
-  const [isGoogleLinked, setIsGoogleLinked] = useState<boolean>(() => {
-    return !!localStorage.getItem('sunnyBaby_googleToken');
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [isCloudLinked, setIsCloudLinked] = useState<boolean>(false);
 
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     return localStorage.getItem('sunnyBaby_onboardingComplete') !== 'true';
@@ -57,12 +50,9 @@ const App: React.FC = () => {
   const [isBabySettingsOpen, setIsBabySettingsOpen] = useState(false);
   const [editingChild, setEditingChild] = useState<Child | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
-  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isTokenExpired, setIsTokenExpired] = useState(false);
-  const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -76,17 +66,29 @@ const App: React.FC = () => {
   // Robust child selection
   const currentChild = children.find(c => c.id === currentChildId) || children[0];
 
-  // --- Auto-Refresh On Focus ---
+  // --- Realtime Cloud Sync ---
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isGoogleLinked) {
-        console.log('🔄 App Focused: Triggering auto-sync...');
-        syncWithDrive();
-      }
+    if (!isCloudLinked) return;
+
+    // Initial Catch-up
+    syncWithCloud();
+
+    // Subscribe to Realtime
+    const unsubLogs = appwrite.subscribeToChanges(appwrite.COLLECTIONS.LOGS, (p) => {
+      console.log('☁️ Realtime Log update:', p.events);
+      syncWithCloud(); // Simple catch-up for now. Granular merge would be better.
+    });
+
+    const unsubChildren = appwrite.subscribeToChanges(appwrite.COLLECTIONS.CHILDREN, (p) => {
+      console.log('☁️ Realtime Child update:', p.events);
+      syncWithCloud();
+    });
+
+    return () => {
+      unsubLogs();
+      unsubChildren();
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isGoogleLinked]);
+  }, [isCloudLinked]);
 
   // --- Notification Engine ---
   useEffect(() => {
@@ -126,64 +128,51 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [appointments, children]);
 
-  // Load from Dexie on mount
+  // Load from Dexie and Check Appwrite Session on mount
   useEffect(() => {
-    const loadDataFromDexie = async () => {
+    const initApp = async () => {
+      // 1. Check Appwrite Session
+      try {
+        const session = await appwrite.getSession();
+        if (session) {
+          setIsLoggedIn(true);
+          setIsCloudLinked(true);
+          syncWithCloud();
+        }
+      } catch (e) {
+        console.log('No active Appwrite session');
+      }
+
       try {
         console.log('📦 Dexie: Loading tables...');
-        // Add a safety timeout to avoid hanging if IndexedDB stalls
-        const dexiePromise = Promise.all([
+        const [dbLogs, dbChildren, dbAppts, dbCaregivers] = await Promise.all([
           db.logs.toArray(),
           db.children.toArray(),
           db.appointments.toArray(),
-          db.caregivers.toArray(),
-          db.joinRequests.toArray()
+          db.caregivers.toArray()
         ]);
-
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Dexie timeout")), 3000));
-        const [dbLogs, dbChildren, dbAppts, dbCaregivers, dbJoinRequests] = await Promise.race([dexiePromise, timeoutPromise]) as any;
 
         if (dbChildren.length > 0) {
           setChildren(dbChildren);
           setLogs(dbLogs.sort((a, b) => b.timestamp - a.timestamp));
           setAppointments(dbAppts);
           setCaregivers(dbCaregivers);
-          setJoinRequests(dbJoinRequests);
           setCurrentChildId(dbChildren[0].id);
 
-          // Auto-skip onboarding if we have data
           if (localStorage.getItem('sunnyBaby_onboardingComplete') !== 'true') {
-            console.log('✅ Found existing children, skipping onboarding...');
             localStorage.setItem('sunnyBaby_onboardingComplete', 'true');
             setShowOnboarding(false);
           }
         } else {
-          console.log('📦 No children found in Dexie.');
-          // Even if localStorage says we finished onboarding, if we have NO children, 
-          // we MUST show onboarding again to create one.
           setShowOnboarding(true);
-
-          // Fallback to legacy
-          const legacyChildren = safeParse('sunnyBaby_children', INITIAL_CHILDREN);
-          if (legacyChildren && legacyChildren.length > 0) {
-            console.log('📦 Using legacy children fallback.');
-            setChildren(legacyChildren);
-            setCurrentChildId(legacyChildren[0].id);
-            setShowOnboarding(false);
-          }
         }
       } catch (err: any) {
-        console.error('Dexie load error, falling back to legacy state:', err);
-        const legacyChildren = safeParse('sunnyBaby_children', INITIAL_CHILDREN);
-        setChildren(legacyChildren);
-        setCurrentChildId(legacyChildren[0]?.id || 'c1');
-        setLogs(safeParse('babyTrackerLogs', []));
-        setAppointments(safeParse('babyTrackerAppointments', []));
+        console.error('Dexie load error:', err);
       } finally {
-        setTimeout(() => setIsLoading(false), 500); // Small delay to ensure state settles
+        setTimeout(() => setIsLoading(false), 500);
       }
     };
-    loadDataFromDexie();
+    initApp();
 
     // --- Version Check ---
     const lastVersion = localStorage.getItem('sunny_app_version');
@@ -231,139 +220,58 @@ const App: React.FC = () => {
     return Array.from(map.values());
   };
 
-  // Sync Logic with Google Drive
-  const syncWithDrive = async () => {
-    if (!isGoogleLinked) return;
+  // Sync Logic with Appwrite
+  const syncWithCloud = async () => {
+    if (!isCloudLinked) return;
     try {
       setSyncStatus('syncing');
-      await initGapi();
 
-      const token = localStorage.getItem('sunnyBaby_googleToken');
-      if (token) {
-        setGapiToken(token);
-      } else {
-        console.warn('No Google token found in localStorage for sync');
-      }
+      const [cloudLogs, cloudChildren, cloudAppts] = await Promise.all([
+        appwrite.getLogs(),
+        appwrite.getChildren(),
+        appwrite.getAppointments()
+      ]) as any[];
 
-      const fileId = await findOrCreateDatabaseFile();
+      // Fetch current local state
+      const localLogs = await db.logs.toArray();
+      const localChildren = await db.children.toArray();
+      const localAppts = await db.appointments.toArray();
 
-      // 1. Download and Merge
-      const cloudData = await downloadData(fileId) as any;
-      if (cloudData) {
-        // 1. Fetch current local state
-        const localLogs = await db.logs.toArray();
-        const localChildren = await db.children.toArray();
-        const localAppts = await db.appointments.toArray();
-        const localCaregivers = await db.caregivers.toArray();
-        const localRequests = await db.joinRequests.toArray();
+      // Merge logic
+      const mergedLogs = mergeLists(localLogs, cloudLogs || []);
+      const mergedChildren = mergeLists(localChildren, cloudChildren || []);
 
-        // 2. Merge logic
-        const mergedLogs = mergeLists(localLogs, cloudData.logs || []);
-        const mergedChildren = mergeLists(localChildren, cloudData.children || []);
-        const mergedCaregivers = mergeLists(localCaregivers, cloudData.caregivers || []);
-        const mergedRequests = mergeLists(localRequests, cloudData.joinRequests || []);
+      const apptKey = (a: VaccineAppointment) => `${a.childId}-${a.vaccineName}`;
+      const apptMap = new Map<string, VaccineAppointment>();
+      localAppts.forEach(a => apptMap.set(apptKey(a), a));
+      (cloudAppts || []).forEach((a: VaccineAppointment) => {
+        if (!apptMap.has(apptKey(a))) apptMap.set(apptKey(a), a);
+      });
+      const mergedAppts = Array.from(apptMap.values());
 
-        // Appointments use a unique string key normally, but let's just union them for now
-        // A better way would be [childId+vaccineName] uniqueness
-        const apptKey = (a: VaccineAppointment) => `${a.childId}-${a.vaccineName}`;
-        const apptMap = new Map<string, VaccineAppointment>();
-        localAppts.forEach(a => apptMap.set(apptKey(a), a));
-        (cloudData.appointments || []).forEach((a: VaccineAppointment) => {
-          if (!apptMap.has(apptKey(a))) apptMap.set(apptKey(a), a);
-        });
-        const mergedAppts = Array.from(apptMap.values());
+      // Persist to Dexie
+      await db.transaction('rw', [db.logs, db.children, db.appointments], async () => {
+        await Promise.all([db.logs.clear(), db.children.clear(), db.appointments.clear()]);
+        await Promise.all([
+          db.logs.bulkAdd(mergedLogs),
+          db.children.bulkAdd(mergedChildren),
+          db.appointments.bulkAdd(mergedAppts)
+        ]);
+      });
 
-        // 3. Persist to Dexie
-        await db.transaction('rw', [db.logs, db.children, db.appointments, db.caregivers, db.joinRequests], async () => {
-          await Promise.all([
-            db.logs.clear(),
-            db.children.clear(),
-            db.appointments.clear(),
-            db.caregivers.clear(),
-            db.joinRequests.clear()
-          ]);
-          await Promise.all([
-            db.logs.bulkAdd(mergedLogs),
-            db.children.bulkAdd(mergedChildren),
-            db.appointments.bulkAdd(mergedAppts),
-            db.caregivers.bulkAdd(mergedCaregivers),
-            db.joinRequests.bulkAdd(mergedRequests)
-          ]);
-        });
-
-        // 4. Update UI State
-        setLogs(mergedLogs.sort((a, b) => b.timestamp - a.timestamp));
-        setChildren(mergedChildren);
-        setAppointments(mergedAppts);
-        setCaregivers(mergedCaregivers);
-        setJoinRequests(mergedRequests);
-
-        console.log('✅ Bidirectional Sync Merge Complete');
-      }
+      // Update UI State
+      setLogs(mergedLogs.sort((a, b) => b.timestamp - a.timestamp));
+      setChildren(mergedChildren);
+      setAppointments(mergedAppts);
 
       setSyncStatus('idle');
-      setIsTokenExpired(false);
-      console.log('🏁 Sync sequence completed');
+      console.log('✅ Appwrite Sync Complete');
     } catch (err: any) {
-      console.error('Cloud Sync Error:', err);
+      console.error('Appwrite Sync Error:', err);
       setSyncStatus('error');
-
-      const errMsg = err.result?.error?.message || err.message || 'Unknown error';
-      if (errMsg.includes('401') || errMsg.includes('unauthenticated') || errMsg.includes('credentials')) {
-        setIsTokenExpired(true);
-        setIsGoogleLinked(false);
-        localStorage.removeItem('sunnyBaby_googleToken');
-      } else {
-        showToast(`Sync Error: ${errMsg}`);
-      }
+      showToast(`Sync Error: ${err.message}`);
     }
   };
-
-  useEffect(() => {
-    if (isGoogleLinked) {
-      syncWithDrive();
-    }
-  }, [isGoogleLinked]);
-
-  // Push to Drive on changes (debounced)
-  useEffect(() => {
-    if (isGoogleLinked && (logs.length > 0 || children.length > 0)) {
-      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-
-      syncTimeoutRef.current = setTimeout(async () => {
-        try {
-          setSyncStatus('syncing');
-          await initGapi();
-
-          const token = localStorage.getItem('sunnyBaby_googleToken');
-          if (token) {
-            setGapiToken(token);
-          }
-
-          const fileId = await findOrCreateDatabaseFile();
-          await uploadData(fileId, {
-            logs,
-            children,
-            appointments,
-            caregivers,
-            joinRequests,
-            lastSync: Date.now()
-          });
-          setSyncStatus('idle');
-          console.log('📦 Cloud Backup Successful: All tables synced.');
-        } catch (err: any) {
-          console.error('Push Sync Error Details:', err);
-          setSyncStatus('error');
-          const errMsg = err.result?.error?.message || err.message || '';
-          if (errMsg.includes('401') || errMsg.includes('credentials')) {
-            setIsTokenExpired(true);
-            setIsGoogleLinked(false);
-            localStorage.removeItem('sunnyBaby_googleToken');
-          }
-        }
-      }, 5000); // Wait 5s after last change
-    }
-  }, [logs, children, appointments, caregivers, joinRequests, isGoogleLinked]);
 
   useEffect(() => {
     if (contentRef.current) {
@@ -390,33 +298,19 @@ const App: React.FC = () => {
     return safeParse('sunny_profile', { name: 'Parent', email: 'user@sunnybaby.app', photoUrl: '' });
   });
 
-  const handleLogin = async (googleToken?: string) => {
-    setIsLoggedIn(true);
-    localStorage.setItem('sunnyBaby_isLoggedIn', 'true');
-
-    if (googleToken) {
-      localStorage.setItem('sunnyBaby_googleToken', googleToken);
-      setIsGoogleLinked(true);
-
-      // Fetch Profile from Google
-      try {
-        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${googleToken}` }
-        });
-        const data = await response.json();
-
-        const newProfile = {
-          name: data.name || userProfile.name,
-          email: data.email || userProfile.email,
-          photoUrl: data.picture || userProfile.photoUrl
-        };
-
-        setUserProfile(newProfile);
-        localStorage.setItem('sunny_profile', JSON.stringify(newProfile));
-        console.log('✅ Google Profile Synced:', newProfile.email);
-      } catch (err) {
-        console.error('Failed to fetch Google profile:', err);
-      }
+  const handleLogin = async (username: string, password: string, remember: boolean) => {
+    try {
+      setSyncStatus('syncing');
+      await appwrite.loginWithUsername(username, password, remember);
+      setIsLoggedIn(true);
+      setIsCloudLinked(true);
+      showToast('Welcome back! ☁️');
+      syncWithCloud();
+    } catch (err: any) {
+      console.error('Appwrite Login Failed:', err);
+      // Let the Login component handle the visual error state if we pass it down, 
+      // but for now we'll just throw it or show a toast if Login.tsx doesn't.
+      throw err; // Login.tsx should catch this and show error
     }
   };
 
@@ -439,15 +333,6 @@ const App: React.FC = () => {
 
   const childLogs = logs.filter(l => l.childId === currentChild?.id).sort((a, b) => b.timestamp - a.timestamp);
   const childAppointments = appointments.filter(a => a.childId === currentChild?.id);
-
-  const triggerRelink = useGoogleLogin({
-    onSuccess: tokenResponse => {
-      handleLogin(tokenResponse.access_token);
-      setIsTokenExpired(false);
-      showToast('Cloud Sync Restored! ✨');
-    },
-    scope: 'https://www.googleapis.com/auth/drive.appdata',
-  });
 
   const addLog = async (entry: Partial<LogEntry>) => {
     if (!currentChild) return;
@@ -495,6 +380,18 @@ const App: React.FC = () => {
     if (editingLog) {
       const updatedLog = { ...editingLog, ...entry, updatedAt: Date.now() } as LogEntry;
       await db.logs.update(editingLog.id, updatedLog);
+
+      if (isCloudLinked) {
+        appwrite.updateLog(editingLog.id, {
+          type: updatedLog.type,
+          details: updatedLog.details,
+          timestamp: updatedLog.timestamp,
+          value: updatedLog.value,
+          notes: updatedLog.notes,
+          updatedAt: updatedLog.updatedAt
+        }).catch(e => console.error('Cloud log update failed', e));
+      }
+
       setLogs(prev => prev.map(l => l.id === editingLog.id ? updatedLog : l));
       setEditingLog(null);
       setIsAddModalOpen(false);
@@ -510,6 +407,19 @@ const App: React.FC = () => {
         ...entry
       };
       await db.logs.add(newLog);
+
+      if (isCloudLinked) {
+        appwrite.createLog({
+          childId: newLog.childId,
+          type: newLog.type,
+          timestamp: newLog.timestamp,
+          details: newLog.details,
+          value: newLog.value,
+          notes: newLog.notes,
+          updatedAt: newLog.updatedAt
+        }).catch(e => console.error('Cloud log push failed', e));
+      }
+
       setLogs(prev => [newLog, ...prev]);
       setIsAddModalOpen(false);
       showToast('Activity logged!');
@@ -523,6 +433,9 @@ const App: React.FC = () => {
 
   const deleteLog = async (id: string) => {
     await db.logs.delete(id);
+    if (isCloudLinked) {
+      appwrite.deleteLog(id).catch(e => console.error('Cloud delete failed', e));
+    }
     setLogs(prev => prev.filter(l => l.id !== id));
   };
 
@@ -578,10 +491,21 @@ const App: React.FC = () => {
       const updates = {
         ...childData,
         updatedAt: Date.now(),
-        // Preserve fields we don't edit here
         sleepStartTime: children.find(c => c.id === childData.id)?.sleepStartTime
       };
       await db.children.update(childData.id, updates);
+
+      if (isCloudLinked) {
+        appwrite.updateChild(childData.id, {
+          name: updates.name,
+          dob: updates.dob,
+          gender: updates.gender,
+          photoUrl: updates.photoUrl,
+          updatedAt: updates.updatedAt,
+          sleepStartTime: updates.sleepStartTime
+        }).catch(e => console.error('Cloud child update failed', e));
+      }
+
       setChildren(prev => prev.map(c => c.id === childData.id ? { ...c, ...updates } as Child : c));
     } else {
       const newChild: Child = {
@@ -593,6 +517,17 @@ const App: React.FC = () => {
         updatedAt: Date.now()
       };
       await db.children.add(newChild);
+
+      if (isCloudLinked) {
+        appwrite.createChild({
+          name: newChild.name,
+          dob: newChild.dob,
+          gender: newChild.gender,
+          photoUrl: newChild.photoUrl,
+          updatedAt: newChild.updatedAt
+        }).catch(e => console.error('Cloud child push failed', e));
+      }
+
       setChildren(prev => [...prev, newChild]);
       setCurrentChildId(newChild.id);
     }
@@ -604,6 +539,10 @@ const App: React.FC = () => {
     await db.logs.where('childId').equals(id).delete();
     await db.appointments.where('childId').equals(id).delete();
 
+    if (isCloudLinked) {
+      appwrite.deleteChild(id).catch(e => console.error('Cloud child delete failed', e));
+    }
+
     const newChildren = children.filter(c => c.id !== id);
     setChildren(newChildren);
     if (currentChildId === id) setCurrentChildId(newChildren[0]?.id || '');
@@ -612,12 +551,11 @@ const App: React.FC = () => {
 
   const handleClearData = async () => {
     if (window.confirm('WARNING: This will permanently delete all your baby logs, family info, and accounts. Are you sure?')) {
-      await db.transaction('rw', [db.logs, db.children, db.appointments, db.caregivers, db.joinRequests], async () => {
+      await db.transaction('rw', [db.logs, db.children, db.appointments, db.caregivers], async () => {
         await db.logs.clear();
         await db.children.clear();
         await db.appointments.clear();
         await db.caregivers.clear();
-        await db.joinRequests.clear();
       });
       localStorage.clear();
       window.location.href = window.location.origin;
@@ -656,31 +594,8 @@ const App: React.FC = () => {
     <div className="min-h-screen min-h-[100dvh] font-sans text-slate-800 select-none overflow-hidden relative">
       <Background />
 
-      {/* Seamless Relink Banner */}
-      {isTokenExpired && (
-        <div className="fixed top-20 left-6 right-6 z-[200] animate-in slide-in-from-top-10 duration-500">
-          <button
-            onClick={() => triggerRelink()}
-            className="w-full bg-orange-600 text-white p-4 rounded-3xl shadow-2xl border-4 border-white flex items-center justify-between gap-3 group active:scale-95 transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
-                <Cloud size={20} className="text-white" />
-              </div>
-              <div className="text-left">
-                <p className="font-black text-xs uppercase tracking-widest leading-none mb-1">Backup Paused</p>
-                <p className="text-[10px] font-bold opacity-80">Google session expired. Tap to Resume.</p>
-              </div>
-            </div>
-            <div className="bg-white text-orange-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider group-hover:bg-orange-50 transition-colors">
-              Reconnect
-            </div>
-          </button>
-        </div>
-      )}
-
       {/* Cloud Status Indicator */}
-      {isGoogleLinked && (
+      {isCloudLinked && (
         <div className={`fixed top-4 right-4 z-[100] px-3 py-1.5 rounded-full backdrop-blur-md flex items-center gap-2 text-[10px] font-black uppercase tracking-wider border transition-all duration-500 ${syncStatus === 'syncing' ? 'bg-orange-400/20 border-orange-400/50 text-orange-600' :
           syncStatus === 'error' ? 'bg-red-400/20 border-red-400/50 text-red-600' :
             'bg-green-400/20 border-green-400/50 text-green-600'
@@ -688,7 +603,7 @@ const App: React.FC = () => {
           {syncStatus === 'syncing' ? (
             <><div className="w-2 h-2 rounded-full bg-orange-500 animate-ping" /> Syncing...</>
           ) : syncStatus === 'error' ? (
-            <button onClick={() => syncWithDrive()} className="flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform">
+            <button onClick={() => syncWithCloud()} className="flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform">
               <CloudOff size={12} /> Sync Error • Retry
             </button>
           ) : (
@@ -719,10 +634,9 @@ const App: React.FC = () => {
             caregivers={caregivers}
             onAddChild={handleAddChild}
             onEditChild={handleEditChild}
-            onLinkGoogle={handleLogin}
+            onLinkCloud={() => { }}
             onClearData={handleClearData}
-            isGoogleLinked={isGoogleLinked}
-            isTokenExpired={isTokenExpired}
+            isCloudLinked={isCloudLinked}
             onAddCaregiver={async (c) => {
               await db.caregivers.add(c);
               setCaregivers([...caregivers, c]);
@@ -742,47 +656,6 @@ const App: React.FC = () => {
             onEditCaregiverClick={(c) => {
               setEditingCaregiver(c);
               setIsFamilyModalOpen(true);
-            }}
-            joinRequests={joinRequests}
-            onJoinFamily={async (code) => {
-              const profile = JSON.parse(localStorage.getItem('sunny_profile') || '{}');
-              const newRequest: JoinRequest = {
-                id: Date.now().toString(),
-                userId: Date.now().toString(), // Should be real user ID in production
-                userName: profile.name || 'Anonymous',
-                userEmail: profile.email || 'unknown',
-                inviteCode: code,
-                status: 'pending',
-                timestamp: Date.now()
-              };
-              await db.joinRequests.add(newRequest);
-              setJoinRequests([...joinRequests, newRequest]);
-              const toast = document.createElement('div');
-              toast.className = 'fixed top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full text-xs font-black shadow-2xl z-[300] border-2 border-white pointer-events-none';
-              toast.innerHTML = `<span>Request sent: ${code}</span>`;
-              document.body.appendChild(toast);
-              setTimeout(() => toast.remove(), 3000);
-            }}
-            onApproveRequest={async (req) => {
-              const newCaregiver: Caregiver = {
-                id: req.userId,
-                name: req.userName,
-                email: req.userEmail,
-                role: 'Caregiver',
-                photoUrl: `https://picsum.photos/100?u=${req.userId}`,
-                accessLevel: 'Editor',
-                status: 'approved',
-                joinedAt: Date.now(),
-                updatedAt: Date.now()
-              };
-              await db.caregivers.add(newCaregiver);
-              await db.joinRequests.delete(req.id);
-              setCaregivers([...caregivers, newCaregiver]);
-              setJoinRequests(joinRequests.filter(r => r.id !== req.id));
-            }}
-            onDenyRequest={async (req) => {
-              await db.joinRequests.delete(req.id);
-              setJoinRequests(joinRequests.filter(r => r.id !== req.id));
             }}
             profile={userProfile}
             onUpdateProfile={(p) => {
