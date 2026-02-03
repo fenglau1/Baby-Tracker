@@ -314,6 +314,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLogout = async () => {
+    if (window.confirm('Are you sure you want to log out? Local records will remain.')) {
+      try {
+        await appwrite.logout();
+      } catch (err) {
+        console.error('Logout error:', err);
+      }
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
   const handleOnboardingComplete = async (childData: Partial<Child>) => {
     const newChild: Child = {
       id: `c${Date.now()}`,
@@ -663,6 +675,7 @@ const App: React.FC = () => {
               localStorage.setItem('sunny_profile', JSON.stringify(p));
             }}
             onHardRefresh={handleHardRefresh}
+            onLogout={handleLogout}
             version={APP_VERSION}
           />
           }

@@ -22,6 +22,7 @@ interface SettingsProps {
     profile: { name: string; email: string; photoUrl: string };
     onUpdateProfile: (profile: { name: string; email: string; photoUrl: string }) => void;
     onHardRefresh: () => void;
+    onLogout: () => void;
     version: string;
 }
 
@@ -42,6 +43,7 @@ export const Settings: React.FC<SettingsProps> = ({
     profile: initialProfile,
     onUpdateProfile,
     onHardRefresh,
+    onLogout,
     version
 }) => {
 
@@ -339,7 +341,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">Version {version} • Baby Tracker</p>
                 <div className="flex flex-col gap-3 items-center">
                     <button onClick={onClearData} className="inline-flex items-center gap-2 text-slate-400 hover:text-red-500 font-black text-xs uppercase tracking-wider bg-slate-50 hover:bg-red-50 px-6 py-3 rounded-full transition-all">Clear All Data</button>
-                    <button onClick={() => { if (window.confirm('Are you sure you want to log out? Local records will remain.')) { localStorage.clear(); window.location.reload(); } }} className="inline-flex items-center gap-2 text-red-500 hover:text-white font-black text-xs uppercase tracking-wider bg-red-50 hover:bg-red-500 px-6 py-3 rounded-full transition-all border border-red-100"><LogOut size={14} strokeWidth={3} /> Log Out</button>
+                    <button onClick={onLogout} className="inline-flex items-center gap-2 text-red-500 hover:text-white font-black text-xs uppercase tracking-wider bg-red-50 hover:bg-red-500 px-6 py-3 rounded-full transition-all border border-red-100"><LogOut size={14} strokeWidth={3} /> Log Out</button>
                 </div>
             </div>
         </div>
